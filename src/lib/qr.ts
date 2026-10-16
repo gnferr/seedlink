@@ -10,25 +10,8 @@ export type QrMatrix = {
 };
 
 export function generateMatrix(input: string): QrMatrix {
+  if (!input) throw new Error("QR input must not be empty");
   // "H" so the extruded geometry can lose some contrast and still scan.
-  const qr = QRCode.create(input || " ", { errorCorrectionLevel: "H" });
+  const qr = QRCode.create(input, { errorCorrectionLevel: "H" });
   return { cells: qr.modules.data as Uint8Array, size: qr.modules.size };
-}
-
-/**
- * Deterministic 0..1 value per module, so heights stay stable across
- * re-renders instead of jittering on every frame.
- */
-export function moduleNoise(x: number, z: number): number {
-  const h = Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
-  return h - Math.floor(h);
-}
-
-export function moduleHeight(
-  x: number,
-  z: number,
-  min: number,
-  max: number,
-): number {
-  return min + moduleNoise(x, z) * (max - min);
 }
