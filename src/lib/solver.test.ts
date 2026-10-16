@@ -42,7 +42,8 @@ test("the screen band scales with matrix size", () => {
 });
 
 test("elevation is clamped to a safe range, so cos never reaches zero", () => {
-  for (const deg of [-10, 0, 90, 180]) {
+  const bad = [-10, 0, 90, 180, NaN, undefined as unknown as number];
+  for (const deg of bad) {
     for (const b of solve(m, tree, deg)) assert.ok(Number.isFinite(b.y));
   }
 });
@@ -70,11 +71,25 @@ test("cells in a column are ordered by ground depth", () => {
   }
 });
 
-test("surplus cells in a crowded column do not collapse onto one height", () => {
-  const blocks = solve(generateMatrix("x".repeat(400)), tree, 30);
+// Amended (Ruling C11): the original asserted distinct `y`, which cannot fail —
+// `w` is unique per cell within a column, so `y` is strictly increasing no matter
+// what the slot logic does. Assert in screen-`v` space instead, where the
+// sub-sample offset is the only thing that separates cells sharing a slot.
+test("surplus cells sharing a slot are separated by the sub-sample offset", () => {
+  const m2 = generateMatrix("x".repeat(400));
+  const blocks = solve(m2, tree, 30);
   const col = groupByScreenColumn(blocks);
-  const crowded = [...col.values()].sort((p, q) => q.length - p.length)[0];
-  assert.ok(new Set(crowded.map((b) => b.y.toFixed(4))).size > 1);
+  // Every covered column, not just the largest: the largest here (58 members, 58
+  // mask samples) happens to carry no surplus at all, so it never shares a slot.
+  const covered = [...col.values()].filter((ms) => ms.some((b) => b.region !== null));
+  // v = y*cos - w*sin recovers the screen height the solver aimed each block at.
+  const rad = (30 * Math.PI) / 180;
+  for (const crowded of covered) {
+    const vs = crowded.map((b) =>
+      (b.y * Math.cos(rad) - groundW(b.x, b.z, m2.size) * Math.sin(rad)).toFixed(4),
+    );
+    assert.equal(new Set(vs).size, vs.length, "two blocks were aimed at the same screen height");
+  }
 });
 
 test("cells outside the shape still get placed, low and quiet", () => {

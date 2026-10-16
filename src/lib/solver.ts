@@ -35,6 +35,9 @@ const MIN_HEIGHT = 0.8;
  */
 const BAND_LO_RATIO = 0.36;
 
+/** Used when the caller hands over a non-finite angle; the spec's default (§4B). */
+const DEFAULT_ELEVATION_DEG = 30;
+
 /** Horizontal screen position — fixed by the cell, never by the solver. */
 export function screenU(x: number, z: number): number {
   return (x - z) / Math.SQRT2;
@@ -63,9 +66,13 @@ export function solve(
   elevationDeg: number,
 ): Block[] {
   const { cells, size } = matrix;
+  // Math.max propagates NaN, so a non-finite angle has to be replaced before the
+  // clamp rather than clamped by it.
+  const deg = Number.isFinite(elevationDeg)
+    ? elevationDeg
+    : DEFAULT_ELEVATION_DEG;
   const elevationRad =
-    (Math.min(ELEVATION_MAX_DEG, Math.max(ELEVATION_MIN_DEG, elevationDeg)) *
-      Math.PI) /
+    (Math.min(ELEVATION_MAX_DEG, Math.max(ELEVATION_MIN_DEG, deg)) * Math.PI) /
     180;
   const band = screenBand(size);
   const uMax = (size - 1) / Math.SQRT2;
