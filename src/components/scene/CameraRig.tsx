@@ -171,8 +171,10 @@ export default function CameraRig({
     const instant = !placed.current || reduced;
     placed.current = true;
     const still = state !== "EXPLORE";
-    if (still) stillGate(env, instant ? 0 : RAMP_DOWN_SECONDS);
-    else gsap.killTweensOf(env.gate);
+    if (still) {
+      stillGate(env, instant ? 0 : RAMP_DOWN_SECONDS);
+      setCalm(env, 0);
+    } else gsap.killTweensOf(env.gate);
 
     // Look-at point is not stored on the camera, so project it along the current view axis.
     const fromPos = cam.position.clone();

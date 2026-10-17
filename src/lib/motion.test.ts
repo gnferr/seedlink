@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import gsap from "gsap";
 import {
   SHAKE_CAP,
   SWAY_CAP,
@@ -159,4 +160,34 @@ test("setCalm assigns the value as given", () => {
   assert.equal(env.gate.calm, 0);
   setCalm(env, 0.25);
   assert.equal(env.gate.calm, 0.25);
+});
+
+test("stillGate kills a live shake and ramp-up, leaving only the ramp to 0", () => {
+  const env = createEnvironment();
+  try {
+    triggerShake(env, false);
+    rampStateGain(env, 1, 0.4);
+    stillGate(env, 0.4);
+    assert.equal(env.gate.shake, 0);
+    const tweens = gsap.getTweensOf(env.gate);
+    assert.equal(tweens.length, 1);
+    assert.deepEqual(Object.keys(tweens[0].vars).filter((k) => k in env.gate), ["stateGain"]);
+    assert.equal(tweens[0].vars.stateGain, 0);
+  } finally {
+    gsap.killTweensOf(env.gate);
+  }
+});
+
+test("restGate kills a live ramp-up and leaves exact zeros", () => {
+  const env = createEnvironment();
+  try {
+    rampStateGain(env, 1, 0.4);
+    triggerShake(env, false);
+    restGate(env);
+    assert.equal(gsap.getTweensOf(env.gate).length, 0);
+    const { stateGain, calm, shake } = env.gate;
+    assert.deepEqual({ stateGain, calm, shake }, { stateGain: 0, calm: 0, shake: 0 });
+  } finally {
+    gsap.killTweensOf(env.gate);
+  }
 });

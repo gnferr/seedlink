@@ -30,7 +30,12 @@ export default function QrScene({
   onSettled?: (state: ViewState) => void;
   ambientMotion?: boolean;
 }) {
-  const env = useState(() => createEnvironment())[0];
+  const env = useState(() => {
+    const e = createEnvironment();
+    // The app opens at the reveal pose (proximity 1), so the first frame must already be calm.
+    e.gate.calm = 0;
+    return e;
+  })[0];
   const plane = size + QUIET_ZONE * 2;
   return (
     <Canvas
@@ -46,7 +51,7 @@ export default function QrScene({
         <planeGeometry args={[plane, plane]} />
         <meshBasicMaterial color={theme.colorLight} />
       </mesh>
-      <Blocks blocks={blocks} size={size} theme={theme} flatten={state === "SCAN"} env={env} />
+      {/* Rendered before Blocks so its useFrame (which sets calm) subscribes, and runs, first. */}
       <CameraRig
         state={state}
         size={size}
@@ -57,6 +62,7 @@ export default function QrScene({
         env={env}
         ambientMotion={ambientMotion}
       />
+      <Blocks blocks={blocks} size={size} theme={theme} flatten={state === "SCAN"} env={env} />
     </Canvas>
   );
 }
