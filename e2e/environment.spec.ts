@@ -116,24 +116,47 @@ async function cornerStable(page: Page) {
 }
 
 /** Orbit damping glides for a few seconds after a drag; wait until two frames 400 ms apart match. */
-async function rest(page: Page, tries = 30) {
+async function rest(page: Page, tries = 30, run = 3) {
+  // A single equal pair can be coincidence (a dropped frame under load); resting means `run` equal pairs in a row.
+  let prev = await captureCanvas(page);
+  let equal = 0;
+  for (let i = 0; i < tries; i++) {
+    await page.waitForTimeout(400);
+    const cur = await captureCanvas(page);
+    equal = cur === prev ? equal + 1 : 0;
+    if (equal >= run) return true;
+    prev = cur;
+  }
+  return false;
+}
+
+/** True as soon as two frames 400 ms apart differ; false if the frame stays identical for `tries` samples. */
+async function moves(page: Page, tries = 20) {
   let prev = await captureCanvas(page);
   for (let i = 0; i < tries; i++) {
     await page.waitForTimeout(400);
     const cur = await captureCanvas(page);
-    if (cur === prev) return true;
+    if (cur !== prev) return true;
     prev = cur;
   }
   return false;
 }
 
 async function orbitAway(page: Page) {
+  // Controls ignore a drag before the first Explore settle, which left the camera aligned (calm 0) and flaked the motion tests.
+  await settled(page, "EXPLORE");
+  const before = await captureCanvas(page);
   const box = (await page.locator("canvas").boundingBox())!;
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
-  await page.mouse.move(cx, cy);
-  await page.mouse.down();
-  await page.mouse.move(cx + 120, cy + 60, { steps: 10 });
-  await page.mouse.up();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    await page.mouse.move(cx + 120, cy + 60, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+    if ((await captureCanvas(page)) !== before) return;
+  }
+  throw new Error("the drag never moved the camera");
 }
 
 test("E1 — the Scan frame is byte-identical across all four seasons, breeze on and off", async ({ page }) => {
@@ -283,17 +306,19 @@ test("the app opens aligned and wakes when you orbit away", async ({ page }) => 
   expect(await captureCanvas(page) !== b, "orbited Explore is not alive").toBe(true);
 });
 
-// The damping glide alone makes frames differ for ~5 s, so wait it out: only sway/particles keep an orbited Explore moving.
+// The damping glide alone moves frames for ~5 s, so first wait for the Breeze-off control to rest, which proves the glide
+// is over; then Breeze on must move again. Ambient particles come in lulls, so "moves at least once" is the stable claim.
 test("orbited Explore keeps moving with Breeze on and rests with Breeze off", async ({ page }) => {
   test.setTimeout(120_000);
   await ready(page);
   await orbitAway(page);
-  await page.waitForTimeout(7000);
-  expect(await rest(page, 8), "Breeze on: expected sway/particles to keep the frame moving").toBe(false);
-
   await breeze(page).click();
   await expect(breeze(page)).toHaveAttribute("aria-checked", "false");
-  expect(await rest(page, 30), "Breeze off: expected the frame to come to rest").toBe(true);
+  expect(await rest(page, 40), "Breeze off: expected the frame to come to rest").toBe(true);
+
+  await breeze(page).click();
+  await expect(breeze(page)).toHaveAttribute("aria-checked", "true");
+  expect(await moves(page, 20), "Breeze on: expected sway/particles to move the rested frame").toBe(true);
 });
 
 test("E9 — no shader errors across a season cycle and all three views", async ({ page }) => {
