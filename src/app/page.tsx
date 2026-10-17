@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import gsap from "gsap";
 import { generateMatrix } from "@/lib/qr";
 import { THEMES, type ThemeId } from "@/lib/themes";
-import type { ViewMode } from "@/components/QrScene";
+import { solve } from "@/lib/solver";
+import { SHAPES } from "@/lib/shapes";
+import type { ViewState } from "@/components/scene/CameraRig";
 
-const QrScene = dynamic(() => import("@/components/QrScene"), {
+const QrScene = dynamic(() => import("@/components/scene/QrScene"), {
   ssr: false,
   loading: () => (
     <div className="flex h-full items-center justify-center bg-zinc-200 dark:bg-zinc-900">
@@ -33,11 +35,12 @@ export default function Home() {
   const [text, setText] = useState(DEFAULT_URL);
   const [matrix, setMatrix] = useState(() => generateMatrix(DEFAULT_URL));
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<ViewMode>("EXPLORE");
+  const [mode, setMode] = useState<ViewState>("EXPLORE");
   const [themeId, setThemeId] = useState<ThemeId>("CITYSCAPE");
   const panelRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const theme = THEMES[themeId];
+  const blocks = useMemo(() => solve(matrix, SHAPES.MINECRAFT_TREE, 30), [matrix]);
 
   // One debounce does both jobs: it only commits text and matrix together when the input
   // actually encodes, so a too-long string leaves the last working code on screen.
@@ -83,7 +86,7 @@ export default function Home() {
         requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
       );
     });
-    const canvas = sceneRef.current?.querySelector("canvas");
+    const canvas = canvasRef.current;
     if (!canvas) return;
     const link = document.createElement("a");
     link.href = canvas.toDataURL("image/png");
@@ -171,12 +174,21 @@ export default function Home() {
       )}
 
       <div
-        ref={sceneRef}
         role="img"
         aria-label={`QR code encoding ${text || "nothing yet"}. ${theme.label} theme, ${viewLabel}.`}
         className="relative min-h-0 flex-1"
       >
-        <QrScene matrix={matrix} mode={mode} theme={theme} />
+        <QrScene
+          blocks={blocks}
+          size={matrix.size}
+          theme={theme}
+          state={mode}
+          elevationDeg={30}
+          onProximityChange={() => {}}
+          onCanvasReady={(c) => {
+            canvasRef.current = c;
+          }}
+        />
       </div>
 
       <p aria-live="polite" className="sr-only">
