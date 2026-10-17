@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { generateMatrix, QUIET_ZONE, type QrMatrix } from "./qr.ts";
 import { sampleBuffer, scanPitch } from "./sampleScan.ts";
+import { FIT_MARGIN } from "./scanFit.ts";
 
 const W = 600;
 const H = 500;
@@ -29,8 +30,8 @@ const m = generateMatrix("https://example.com");
 const at = (x: number, z: number) => m.cells[z * m.size + x];
 const run = (buf: Uint8ClampedArray) => sampleBuffer(buf, W, H, m, scanPitch(W, H, m.size));
 
-test("pitch follows the camera fit including its 0.9 margin", () => {
-  assert.equal(scanPitch(W, H, m.size), (Math.min(W, H) / (m.size + QUIET_ZONE * 2)) * 0.9);
+test("pitch follows the camera fit including its shared margin", () => {
+  assert.equal(scanPitch(W, H, m.size), (Math.min(W, H) / (m.size + QUIET_ZONE * 2)) * FIT_MARGIN);
 });
 
 test("a perfect render separates with every module matched", () => {

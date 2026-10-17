@@ -3,6 +3,9 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --ring: #18181b;
+  --accent: #2f6b22;
+  --selection: #cfe8bf;
 }
 
 @theme inline {
@@ -16,6 +19,10 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+    --ring: #f4f4f5;
+    --accent: #7cc66a;
+    --selection: #2f5226;
+    color-scheme: dark;
   }
 }
 
@@ -23,4 +30,21 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* A real ring with offset on every control, never a border-colour swap. */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--selection);
+  color: var(--foreground);
+}
+
+input,
+select {
+  caret-color: var(--accent);
+  accent-color: var(--accent);
 }

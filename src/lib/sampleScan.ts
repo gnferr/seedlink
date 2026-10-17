@@ -1,12 +1,10 @@
 import { QUIET_ZONE, type QrMatrix } from "./qr.ts";
+import { FIT_MARGIN } from "./scanFit.ts";
 import { classifySeparation, type Separation } from "./verify.ts";
-
-// Must equal FIT_MARGIN in components/scene/CameraRig.tsx (not exported there).
-const SCAN_FIT_MARGIN = 0.9;
 
 /** Module pitch in pixels of a w×h buffer under the SCAN camera (ortho zoom = min(w,h)/plane × margin). */
 export function scanPitch(width: number, height: number, size: number): number {
-  return (Math.min(width, height) / (size + QUIET_ZONE * 2)) * SCAN_FIT_MARGIN;
+  return (Math.min(width, height) / (size + QUIET_ZONE * 2)) * FIT_MARGIN;
 }
 
 /**

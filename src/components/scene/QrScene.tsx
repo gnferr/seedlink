@@ -15,6 +15,7 @@ export default function QrScene({
   elevationDeg,
   onProximityChange,
   onCanvasReady,
+  onSettled,
 }: {
   blocks: Block[];
   size: number;
@@ -23,6 +24,7 @@ export default function QrScene({
   elevationDeg: number;
   onProximityChange: (p: number) => void;
   onCanvasReady: (canvas: HTMLCanvasElement) => void;
+  onSettled?: (state: ViewState) => void;
 }) {
   const plane = size + QUIET_ZONE * 2;
   return (
@@ -45,6 +47,7 @@ export default function QrScene({
         size={size}
         elevationDeg={elevationDeg}
         onProximityChange={onProximityChange}
+        onSettled={onSettled}
       />
     </Canvas>
   );

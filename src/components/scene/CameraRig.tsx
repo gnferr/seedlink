@@ -6,12 +6,12 @@ import { OrbitControls, OrthographicCamera } from "@react-three/drei";
 import gsap from "gsap";
 import * as THREE from "three";
 import { QUIET_ZONE } from "@/lib/qr";
+import { FIT_MARGIN } from "@/lib/scanFit";
 import { ELEVATION_MAX_DEG, ELEVATION_MIN_DEG } from "@/lib/solver";
 
 export type ViewState = "EXPLORE" | "REVEAL" | "SCAN";
 
 const FALLBACK_ELEVATION_DEG = 30;
-const FIT_MARGIN = 0.9;
 const PROXIMITY_FULL_DEG = 30;
 const PROXIMITY_EPSILON = 0.01;
 
@@ -78,11 +78,14 @@ export default function CameraRig({
   size,
   elevationDeg,
   onProximityChange,
+  onSettled,
 }: {
   state: ViewState;
   size: number;
   elevationDeg: number;
   onProximityChange: (p: number) => void;
+  /** Fired when a state tween completes, and on instant placement. */
+  onSettled?: (state: ViewState) => void;
 }) {
   const camRef = useRef<THREE.OrthographicCamera>(null);
   const { width, height } = useThree((s) => s.size);
@@ -143,6 +146,7 @@ export default function CameraRig({
       },
       onComplete: () => {
         if (state === "EXPLORE") setReadyState(state);
+        onSettled?.(state);
       },
     });
     return () => {

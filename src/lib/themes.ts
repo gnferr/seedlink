@@ -11,6 +11,20 @@ export type Theme = {
 };
 
 export const THEMES = {
+  // Region colours only show in Explore/Reveal; Scan flattens to colorScan, so these can be vivid.
+  MINECRAFT: {
+    label: "Minecraft",
+    regionColors: {
+      trunk: "#8a5a32",
+      canopy: "#4f9d3a",
+      body: "#d8d0bc",
+    },
+    colorScan: "#1d2618",
+    colorLight: "#f5f1e6",
+    background: "#d5e6ef",
+    roughness: 0.85,
+    metalness: 0,
+  },
   CITYSCAPE: {
     label: "Cityscape",
     regionColors: {
