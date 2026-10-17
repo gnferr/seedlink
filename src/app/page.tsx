@@ -10,6 +10,7 @@ import { generateMatrix, type QrMatrix } from "@/lib/qr";
 import { exportGlb, exportPng } from "@/lib/exporters";
 import { useReducedMotion } from "@/lib/useReducedMotion";
 import { seasonTheme, type Season } from "@/lib/seasons";
+import { viewForKey } from "@/lib/hotkeys";
 import { sampleScan } from "@/lib/sampleScan";
 import { DEFAULT_SHAPE_ID, SHAPES } from "@/lib/shapes";
 import { solve } from "@/lib/solver";
@@ -134,6 +135,14 @@ export default function Home() {
     }, DEBOUNCE_MS);
     return () => clearTimeout(id);
   }, [qr, mode, settled, verifyKey, glEpoch]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const v = e.repeat ? null : viewForKey({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, target: e.target as HTMLElement | null });
+      if (v) setMode(v);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   // A result for different input is never shown.
   const separation = scan?.key === verifyKey ? scan.separation : null;
 
