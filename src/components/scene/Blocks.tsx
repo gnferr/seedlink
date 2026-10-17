@@ -30,7 +30,7 @@ function Group({
     if (!mesh) return;
     blocks.forEach((b, i) => {
       if (b.grounded) {
-        const h = b.y + HALF_BLOCK;
+        const h = Math.max(HALF_BLOCK, b.y + HALF_BLOCK);
         dummy.position.set(b.x - offsetX, h / 2, b.z - offsetZ);
         dummy.scale.set(1, h, 1);
       } else {
@@ -70,11 +70,9 @@ export default function Blocks({
   blocks: Block[];
   theme: Theme;
   flatten: boolean;
-  /** Matrix size; centres the grid. Falls back to the largest block index + 1, which is off-centre if the outer cells are light. */
-  size?: number;
+  size: number;
 }) {
-  const n = size ?? blocks.reduce((m, b) => Math.max(m, b.x, b.z), -1) + 1;
-  const offset = (n - 1) / 2;
+  const offset = (size - 1) / 2;
 
   const groups = useMemo(() => {
     if (flatten) return [{ key: "scan", color: theme.colorScan, blocks }];
