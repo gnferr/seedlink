@@ -23,9 +23,9 @@ export default function StatusPlaque({ separation, checked, hasCode = true }: { 
           </>
         );
   return (
-    <p role="status" aria-live="polite" className="hud-panel mr-1 mb-1 flex items-center gap-2 px-3 py-2 text-sm font-semibold max-md:py-1.5 max-md:text-[13px] max-md:leading-4">
+    <p role="status" aria-live="polite" className="hud-panel mr-1 mb-1 flex min-w-0 flex-1 items-center md:flex-none gap-2 px-3 py-2 text-sm font-semibold max-md:mb-0 max-md:py-0.5 max-md:text-[13px] max-md:leading-4">
       <HudIcon name={icon} />
-      <span className="min-w-0 max-md:line-clamp-1">{label}</span>
+      <span className="min-w-0 max-md:line-clamp-2">{label}</span>
     </p>
   );
 }

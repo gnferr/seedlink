@@ -47,9 +47,12 @@ test("every control is reachable by keyboard with a visible focus ring", async (
     if (!r.ring) bad.push(r.name);
   }
   expect(bad, "controls focused without an outline").toEqual([]);
-  // Next's dev-only indicator (#next-logo) is not part of the app.
-  const expected = await page.locator("input, select, button:not(#next-logo)").count();
+  // A radiogroup is one Tab stop, so count visible controls that are in the tab order. Next's dev-only indicator (#next-logo) is not the app.
+  const expected = await page
+    .locator("input, select, button:not(#next-logo)")
+    .evaluateAll((els) => els.filter((e) => (e as HTMLElement).tabIndex >= 0 && (e as HTMLElement).getClientRects().length > 0).length);
   expect([...seen].length, [...seen].join(" | ")).toBe(expected);
+  expect([...seen].some((n) => n.includes("Summer")), "season dial reached").toBe(true);
 });
 
 // Test-local helper (ruling C2): WCAG contrast of every visible text node in the control panel

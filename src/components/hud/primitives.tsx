@@ -68,19 +68,26 @@ export function HudSwitch({
   checked,
   onChange,
   label,
+  disabled,
   className = "",
+  ...rest
 }: {
   checked: boolean;
   onChange: (next: boolean) => void;
   label: string;
+  /** Exposed as aria-disabled so it stays focusable and can carry its reason. */
+  disabled?: boolean;
   className?: string;
+  "aria-describedby"?: string;
 }) {
   return (
     <button
+      {...rest}
       type="button"
       role="switch"
       aria-checked={checked}
-      onClick={() => onChange(!checked)}
+      aria-disabled={disabled}
+      onClick={disabled ? undefined : () => onChange(!checked)}
       className={`hud-btn min-h-11 justify-between gap-3 ${className}`}
     >
       <span>{label}</span>

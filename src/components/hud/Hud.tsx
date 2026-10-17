@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { ViewState } from "@/components/scene/CameraRig";
 import ColorField from "@/components/controls/ColorField";
+import type { Season } from "@/lib/seasons";
 import { SHAPES } from "@/lib/shapes";
 import { ELEVATION_MAX_DEG, ELEVATION_MIN_DEG } from "@/lib/solver";
 import { THEMES, type ThemeId } from "@/lib/themes";
@@ -10,7 +11,8 @@ import type { Separation } from "@/lib/verify";
 import AlignmentBar from "./AlignmentBar";
 import Hotbar from "./Hotbar";
 import StatusPlaque from "./StatusPlaque";
-import { HudButton, HudIcon } from "./primitives";
+import SeasonDial, { seasonName } from "./SeasonDial";
+import { HudButton, HudIcon, HudSwitch } from "./primitives";
 
 export type ColorKey = "trunk" | "canopy" | "light" | "background";
 
@@ -48,6 +50,13 @@ export default function Hud({
   onExportGlb,
   onExportReveal,
   sculpture,
+  season,
+  onSeason,
+  ambientMotion,
+  onAmbientMotion,
+  motionAllowed,
+  onShake,
+  shakeEnabled,
   collapsed,
   onCollapsed,
   className = "",
@@ -77,6 +86,15 @@ export default function Hud({
   onExportReveal: () => void;
   /** Size of the current sculpture; null with no code. */
   sculpture: { blocks: number; modules: number } | null;
+  season: Season;
+  onSeason: (s: Season) => void;
+  /** Breeze as the user sees it: already false under reduced motion. */
+  ambientMotion: boolean;
+  onAmbientMotion: (on: boolean) => void;
+  /** false under reduced motion. */
+  motionAllowed: boolean;
+  onShake: () => void;
+  shakeEnabled: boolean;
   /** null = auto: CSS expands it from `md` up and docks it below. The first toggle makes it explicit. */
   collapsed: boolean | null;
   onCollapsed: (c: boolean) => void;
@@ -97,10 +115,16 @@ export default function Hud({
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
   }, [auto]);
+  const note = [
+    !motionAllowed && "Breeze is off while motion is reduced.",
+    !shakeEnabled && (motionAllowed ? "Shake works in Explore." : "Shake is off while motion is reduced."),
+  ]
+    .filter(Boolean)
+    .join(" ");
   const toggle = () => onCollapsed(!(collapsed ?? !window.matchMedia("(min-width: 768px)").matches));
 
   return (
-    <section aria-label="Controls" className={`flex flex-col gap-2 overflow-y-auto overscroll-contain pr-1 ${className}`}>
+    <section aria-label="Controls" className={`flex flex-col gap-1 md:gap-2 overflow-y-auto overscroll-contain pr-1 ${className}`}>
       <div className="flex items-start gap-2">
         <Hotbar view={view} onView={onView} revealRef={revealRef} />
         <HudButton ref={toggleRef} onClick={toggle} aria-controls="hud-body" aria-expanded={auto ? undefined : !collapsed} className="w-11 shrink-0 px-0">
@@ -119,9 +143,13 @@ export default function Hud({
         </HudButton>
       </div>
 
-      <StatusPlaque separation={separation} checked={view === "SCAN"} hasCode={sculpture !== null} />
+      {/* Phones: dial and plaque share one row so the dock stays within 96px. */}
+      <div className="flex items-stretch gap-2 md:flex-col">
+        <SeasonDial season={season} onSeason={onSeason} className="mr-1 shrink-0 md:mr-1" />
+        <StatusPlaque separation={separation} checked={view === "SCAN"} hasCode={sculpture !== null} />
+      </div>
 
-      <div className={`hud-panel flex flex-col mb-1 gap-3 p-3 ${bodyHidden}`} id="hud-body">
+      <div className={`hud-panel flex flex-col mb-1 gap-3 p-3 md:gap-1.5 md:p-2.5 ${bodyHidden}`} id="hud-body">
         <div className="flex flex-col gap-2">
           <div className="flex items-baseline justify-between gap-3">
             <label htmlFor="qr-input" className="hud-label">
@@ -154,8 +182,26 @@ export default function Hud({
           />
         )}
 
-        <fieldset className="grid grid-cols-2 gap-x-3 gap-y-3">
-          <legend className="hud-label mb-2">Palette</legend>
+        <div className="flex flex-col gap-2">
+          <p className="hud-label md:hidden">
+            Season: <span className="font-sans">{seasonName(season)}</span>
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <HudSwitch label="Breeze" checked={ambientMotion} disabled={!motionAllowed} aria-describedby={note ? "engine-note" : undefined} onChange={onAmbientMotion} className="hud-tight" />
+            <HudButton disabled={!shakeEnabled} aria-describedby={note ? "engine-note" : undefined} onClick={onShake} className="hud-tight">
+              <HudIcon name="shake" className="mr-1" />
+              Shake
+            </HudButton>
+          </div>
+          {note && (
+            <p id="engine-note" className="text-sm md:text-[13px] md:leading-4">
+              {note}
+            </p>
+          )}
+        </div>
+
+        <fieldset className="grid grid-cols-2 gap-x-3 gap-y-3 md:gap-y-2">
+          <legend className="hud-label mb-2 md:mb-1">Palette</legend>
           {(Object.keys(COLOR_LABELS) as ColorKey[]).map((k) => (
             <ColorField key={k} label={COLOR_LABELS[k]} value={colors[k]} onChange={(hex) => onColor(k, hex)} />
           ))}
@@ -221,13 +267,13 @@ export default function Hud({
               </HudButton>
             ))}
           </div>
-          <p id="export-note" className="text-sm">
+          <p id="export-note" className="text-sm md:text-[13px] md:leading-4">
             {exportError ?? exportNote(blocked, verified)}
           </p>
         </div>
 
         {sculpture && (
-          <p className="text-sm">
+          <p className="text-sm md:text-[13px] md:leading-4">
             {sculpture.blocks} blocks · {sculpture.modules}×{sculpture.modules} modules. Longer links give a finer
             sculpture. The tree only lines up in this on-screen view; a photo of a printed copy won&rsquo;t.
           </p>

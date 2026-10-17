@@ -3,10 +3,13 @@
 import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { HudNote } from "@/components/hud/primitives";
+import { seasonName } from "@/components/hud/SeasonDial";
 import Hud, { type ColorKey } from "@/components/hud/Hud";
 import type { ViewState } from "@/components/scene/CameraRig";
 import { generateMatrix, type QrMatrix } from "@/lib/qr";
 import { exportGlb, exportPng } from "@/lib/exporters";
+import { useReducedMotion } from "@/lib/useReducedMotion";
+import { seasonTheme, type Season } from "@/lib/seasons";
 import { sampleScan } from "@/lib/sampleScan";
 import { DEFAULT_SHAPE_ID, SHAPES } from "@/lib/shapes";
 import { solve } from "@/lib/solver";
@@ -58,6 +61,11 @@ export default function Home() {
   // null = auto (CSS: expanded from md up, docked below); the first toggle makes it explicit.
   const [collapsed, setCollapsed] = useState<boolean | null>(null);
   const [glbError, setGlbError] = useState(false);
+  const [season, setSeason] = useState<Season>("SUMMER");
+  const [breeze, setBreeze] = useState(true);
+  const [shakeTick, setShakeTick] = useState(0);
+  const motionAllowed = !useReducedMotion();
+  const ambientMotion = breeze && motionAllowed;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Presets are starting points; a colour edit overrides only that field.
@@ -113,7 +121,10 @@ export default function Home() {
   }
   const settled = settledKey === camKey;
 
+  const shakeEnabled = mode === "EXPLORE" && motionAllowed;
+
   // Verify on demand: sample only once the camera has settled in Scan, debounced on change.
+  // Summer theme on purpose: Scan flattens every block and the background, so season never changes the sampled frame.
   const verifyKey = qr ? JSON.stringify([qr.text, shapeId, elevation, theme]) : "";
   useEffect(() => {
     if (!qr || mode !== "SCAN" || !settled) return;
@@ -179,6 +190,8 @@ export default function Home() {
           <div
             role="img"
             aria-label={`3D QR code for "${qr.text}", shaped as a ${shape.label}, ${theme.label} theme, ${viewName} view.`}
+            data-view={mode}
+            data-settled={settled}
             className="absolute inset-0"
           >
             <SceneBoundary>
@@ -191,6 +204,10 @@ export default function Home() {
                 onProximityChange={setProximity}
                 onCanvasReady={onCanvasReady}
                 onSettled={onSettled}
+                season={season}
+                ambientMotion={ambientMotion}
+                shakeTick={shakeTick}
+                pokeEnabled={shakeEnabled}
               />
             </SceneBoundary>
           </div>
@@ -208,7 +225,7 @@ export default function Home() {
       <Hud
         collapsed={collapsed}
         onCollapsed={setCollapsed}
-        className="absolute inset-x-3 bottom-3 max-h-[calc(44%-1.5rem)] md:inset-x-auto md:top-4 md:right-4 md:bottom-auto md:max-h-[calc(100%-2rem)] md:w-[21rem]"
+        className="absolute inset-x-3 bottom-3 max-h-[calc(44%-1.5rem)] md:inset-x-auto md:top-3 md:right-4 md:bottom-auto md:max-h-[calc(100%-1.5rem)] md:w-[21rem]"
         input={input}
         onInput={setInput}
         shapeId={shapeId}
@@ -235,13 +252,20 @@ export default function Home() {
         onExportGlb={() => {
           if (!qr) return;
           setGlbError(false);
-          exportGlb(blocks, qr.matrix.size, theme, "voxel-qr.glb").catch(() => setGlbError(true));
+          exportGlb(blocks, qr.matrix.size, seasonTheme(theme, season), "voxel-qr.glb").catch(() => setGlbError(true));
         }}
+        season={season}
+        onSeason={setSeason}
+        ambientMotion={ambientMotion}
+        onAmbientMotion={setBreeze}
+        motionAllowed={motionAllowed}
+        onShake={() => setShakeTick((n) => n + 1)}
+        shakeEnabled={shakeEnabled}
         sculpture={qr ? { blocks: blocks.length, modules: qr.matrix.size } : null}
       />
 
       <p aria-live="polite" className="sr-only">
-        {qr ? `Encoding ${qr.text}. ${viewName} view.` : "No QR code yet."}
+        {qr ? `Encoding ${qr.text}. ${viewName} view. Season: ${seasonName(season)}.` : "No QR code yet."}
       </p>
     </main>
   );
