@@ -412,7 +412,7 @@ git commit -m "feat: add contrast and separation maths"
 
 **Interfaces:**
 - Consumes: `Block` (Task 3), `Theme` (Task 4).
-- Produces: `export default function Blocks(props: { blocks: Block[]; theme: Theme; flatten: boolean }): JSX.Element`
+- Produces: `export default function Blocks(props: { blocks: Block[]; size: number; theme: Theme; flatten: boolean }): JSX.Element` (size added by Ruling C16)
 
 - [ ] **Step 1: Implement `Blocks`**
 
