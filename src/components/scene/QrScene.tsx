@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
+import { blockBox } from "@/lib/blockGeometry";
 import { createEnvironment } from "@/lib/motion";
+import { PARTICLE_SETS, particleBounds, particleBudget } from "@/lib/particles";
+import { nextLayers } from "@/lib/particleLayers";
 import { QUIET_ZONE } from "@/lib/qr";
 import type { Block } from "@/lib/solver";
 import type { Theme } from "@/lib/themes";
@@ -10,6 +13,9 @@ import type { Season } from "@/lib/seasons";
 import Blocks from "./Blocks";
 import CameraRig, { type ViewState } from "./CameraRig";
 import EnvironmentDriver from "./EnvironmentDriver";
+import ParticleLayer, { type Burst } from "./ParticleLayer";
+
+const PARTICLE_SIZE = Math.max(...Object.values(PARTICLE_SETS).map((s) => s.size));
 
 export default function QrScene({
   blocks,
@@ -43,6 +49,51 @@ export default function QrScene({
     return e;
   })[0];
   const plane = size + QUIET_ZONE * 2;
+
+  const [budget] = useState(() =>
+    particleBudget(window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 640),
+  );
+  const bounds = useMemo(() => {
+    const off = (size - 1) / 2;
+    return particleBounds(blocks.map((b) => blockBox(b, off)), PARTICLE_SIZE);
+  }, [blocks, size]);
+  const [bursts] = useState<{ current: Burst[] }>(() => ({ current: [] }));
+
+  // A new object per rig settle, so a repeat settle in the same state is still seen.
+  const [settle, setSettle] = useState<{ state: ViewState; n: number } | null>(null);
+  const settleCount = useRef(0);
+  const handleSettled = useCallback((s: ViewState) => {
+    settleCount.current += 1;
+    setSettle({ state: s, n: settleCount.current });
+  }, []);
+  // Any input that re-tweens the camera voids the last settle in the same render.
+  const camKey = `${state}|${size}|${elevationDeg}`;
+  const [seenCamKey, setSeenCamKey] = useState(camKey);
+  if (seenCamKey !== camKey) {
+    setSeenCamKey(camKey);
+    setSettle(null);
+  }
+  const exploreSettled = state === "EXPLORE" && settle?.state === "EXPLORE";
+
+  const [layers, dispatch] = useReducer(nextLayers, []);
+  const layerId = useRef(0);
+  useEffect(() => {
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (ambientMotion && !reduced && exploreSettled) {
+      layerId.current += 1;
+      dispatch({ type: "season", season, id: layerId.current });
+    } else dispatch({ type: "stop" });
+  }, [ambientMotion, exploreSettled, season]);
+
+  // Reveal and Scan settle only reaches the page once every particle layer has unmounted (envIdle).
+  const forwarded = useRef<typeof settle>(null);
+  useEffect(() => {
+    if (!settle || forwarded.current === settle) return;
+    if (settle.state !== "EXPLORE" && layers.length > 0) return;
+    forwarded.current = settle;
+    onSettled?.(settle.state);
+  }, [settle, layers, onSettled]);
+
   return (
     <Canvas
       gl={{ preserveDrawingBuffer: true }}
@@ -64,11 +115,24 @@ export default function QrScene({
         elevationDeg={elevationDeg}
         blocks={blocks}
         onProximityChange={onProximityChange}
-        onSettled={onSettled}
+        onSettled={handleSettled}
         env={env}
         ambientMotion={ambientMotion}
       />
       <Blocks blocks={blocks} size={size} theme={theme} flatten={state === "SCAN"} env={env} />
+      {layers.map((l) => (
+        <ParticleLayer
+          key={l.id}
+          env={env}
+          season={l.season}
+          bounds={bounds}
+          budget={budget}
+          active={state === "EXPLORE"}
+          leaving={l.leaving}
+          bursts={bursts}
+          onDrained={() => dispatch({ type: "drained", id: l.id })}
+        />
+      ))}
       <EnvironmentDriver
         env={env}
         season={season}
