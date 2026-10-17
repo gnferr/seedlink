@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, OrthographicCamera } from "@react-three/drei";
 import gsap from "gsap";
@@ -22,6 +22,17 @@ type Pose = {
   zoom: number;
 };
 
+function elevationRad(elevationDeg: number): number {
+  const deg = Number.isFinite(elevationDeg) ? elevationDeg : FALLBACK_ELEVATION_DEG;
+  return (Math.min(ELEVATION_MAX_DEG, Math.max(ELEVATION_MIN_DEG, deg)) * Math.PI) / 180;
+}
+
+function revealDirection(elevationDeg: number): THREE.Vector3 {
+  const phi = elevationRad(elevationDeg);
+  const c = Math.cos(phi);
+  return new THREE.Vector3(c / Math.SQRT2, Math.sin(phi), c / Math.SQRT2);
+}
+
 // Matches the solver's basis: direction (cos φ/√2, sin φ, cos φ/√2), world up +Y.
 function revealPose(
   plane: number,
@@ -29,11 +40,10 @@ function revealPose(
   width: number,
   height: number,
 ): Pose {
-  const deg = Number.isFinite(elevationDeg) ? elevationDeg : FALLBACK_ELEVATION_DEG;
-  const phi = (Math.min(ELEVATION_MAX_DEG, Math.max(ELEVATION_MIN_DEG, deg)) * Math.PI) / 180;
+  const phi = elevationRad(elevationDeg);
   const s = Math.sin(phi);
   const c = Math.cos(phi);
-  const dir = new THREE.Vector3(c / Math.SQRT2, s, c / Math.SQRT2);
+  const dir = revealDirection(elevationDeg);
   // Screen-up axis; shifting the look-at along it only re-frames, it never breaks alignment.
   const screenUp = new THREE.Vector3(-s / Math.SQRT2, c, -s / Math.SQRT2);
   // Screen v runs from the plane's near corner (-plane·sinφ/√2) up to the tree's crown (~plane).
@@ -74,19 +84,30 @@ export default function CameraRig({
   elevationDeg: number;
   onProximityChange: (p: number) => void;
 }) {
-  const camera = useThree((s) => s.camera);
+  const camRef = useRef<THREE.OrthographicCamera>(null);
   const { width, height } = useThree((s) => s.size);
   const plane = size + QUIET_ZONE * 2;
   const [readyState, setReadyState] = useState<ViewState | null>(null);
   const controlsOn = readyState === state;
   const placed = useRef(false);
   const lastProximity = useRef(-1);
-  const reveal = revealPose(plane, elevationDeg, width, height);
-  const revealKey = `${reveal.zoom}|${reveal.position.toArray()}`;
+  const sizeRef = useRef({ width, height });
+  const viewDir = useRef(new THREE.Vector3());
+  const revealDir = useMemo(() => revealDirection(elevationDeg), [elevationDeg]);
+  const revealTarget = useMemo(
+    () => revealPose(plane, elevationDeg, 1, 1).target,
+    [plane, elevationDeg],
+  );
+
+  const fitZoom = (s: ViewState) => {
+    const { width: w, height: h } = sizeRef.current;
+    return s === "SCAN" ? scanPose(plane, w, h).zoom : revealPose(plane, elevationDeg, w, h).zoom;
+  };
 
   useEffect(() => {
-    const cam = camera as THREE.OrthographicCamera;
-    const to = state === "SCAN" ? scanPose(plane, width, height) : reveal;
+    const cam = camRef.current;
+    if (!cam) return;
+    const to = state === "SCAN" ? scanPose(plane, sizeRef.current.width, sizeRef.current.height) : revealPose(plane, elevationDeg, sizeRef.current.width, sizeRef.current.height);
     const apply = (pos: THREE.Vector3, tgt: THREE.Vector3, up: THREE.Vector3, zoom: number) => {
       cam.position.copy(pos);
       cam.up.copy(up);
@@ -118,7 +139,7 @@ export default function CameraRig({
         pos.lerpVectors(fromPos, to.position, p.t);
         tgt.lerpVectors(fromTarget, to.target, p.t);
         up.lerpVectors(fromUp, to.up, p.t).normalize();
-        apply(pos, tgt, up, fromZoom + (to.zoom - fromZoom) * p.t);
+        apply(pos, tgt, up, fromZoom + (fitZoom(state) - fromZoom) * p.t);
       },
       onComplete: () => {
         if (state === "EXPLORE") setReadyState(state);
@@ -127,15 +148,29 @@ export default function CameraRig({
     return () => {
       tween.kill();
     };
-    // `reveal` is derived from the deps below; revealKey stands in for it.
+    // Size is read through sizeRef so a resize never restarts the tween.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, plane, width, height, camera, revealKey]);
+  }, [state, plane, elevationDeg]);
+
+  // A resize only rescales zoom, preserving any orbit/zoom the user has made.
+  useEffect(() => {
+    const prev = sizeRef.current;
+    if (prev.width === width && prev.height === height) return;
+    const cam = camRef.current;
+    const before = fitZoom(state);
+    sizeRef.current = { width, height };
+    if (!cam) return;
+    cam.zoom *= fitZoom(state) / before;
+    cam.updateProjectionMatrix();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [width, height]);
 
   useFrame(() => {
-    if (state !== "EXPLORE" || !controlsOn) return;
-    const dir = camera.position.clone().sub(reveal.target).normalize();
-    const base = reveal.position.clone().sub(reveal.target).normalize();
-    const p = proximityFor(dir.angleTo(base));
+    const cam = camRef.current;
+    if (!cam || state !== "EXPLORE" || !controlsOn) return;
+    // View direction, not position: panning moves camera and target together without changing the view.
+    const angle = cam.getWorldDirection(viewDir.current).negate().angleTo(revealDir);
+    const p = proximityFor(angle);
     if (Math.abs(p - lastProximity.current) >= PROXIMITY_EPSILON) {
       lastProximity.current = p;
       onProximityChange(p);
@@ -144,9 +179,9 @@ export default function CameraRig({
 
   return (
     <>
-      <OrthographicCamera makeDefault near={-500} far={500} />
+      <OrthographicCamera ref={camRef} makeDefault near={-500} far={500} />
       {state === "EXPLORE" && controlsOn && (
-        <OrbitControls makeDefault target={reveal.target.toArray()} />
+        <OrbitControls makeDefault target={revealTarget.toArray()} />
       )}
     </>
   );
