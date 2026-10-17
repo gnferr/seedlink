@@ -2,11 +2,9 @@
 
 import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { blockBox } from "@/lib/blockGeometry";
 import type { Block } from "@/lib/solver";
 import type { Theme } from "@/lib/themes";
-
-const BLOCK_HEIGHT = 1.6;
-const HALF_BLOCK = BLOCK_HEIGHT / 2;
 
 const dummy = new THREE.Object3D();
 
@@ -14,14 +12,12 @@ function Group({
   blocks,
   color,
   theme,
-  offsetX,
-  offsetZ,
+  offset,
 }: {
   blocks: Block[];
   color: string;
   theme: Theme;
-  offsetX: number;
-  offsetZ: number;
+  offset: number;
 }) {
   const ref = useRef<THREE.InstancedMesh>(null);
 
@@ -29,20 +25,15 @@ function Group({
     const mesh = ref.current;
     if (!mesh) return;
     blocks.forEach((b, i) => {
-      if (b.grounded) {
-        const h = Math.max(HALF_BLOCK, b.y + HALF_BLOCK);
-        dummy.position.set(b.x - offsetX, h / 2, b.z - offsetZ);
-        dummy.scale.set(1, h, 1);
-      } else {
-        dummy.position.set(b.x - offsetX, b.y, b.z - offsetZ);
-        dummy.scale.set(1, BLOCK_HEIGHT, 1);
-      }
+      const { x, y, z, h } = blockBox(b, offset);
+      dummy.position.set(x, y, z);
+      dummy.scale.set(1, h, 1);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
     });
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
-  }, [blocks, offsetX, offsetZ]);
+  }, [blocks, offset]);
 
   if (blocks.length === 0) return null;
   return (
@@ -87,7 +78,7 @@ export default function Blocks({
   return (
     <>
       {groups.map((g) => (
-        <Group key={g.key} blocks={g.blocks} color={g.color} theme={theme} offsetX={offset} offsetZ={offset} />
+        <Group key={g.key} blocks={g.blocks} color={g.color} theme={theme} offset={offset} />
       ))}
     </>
   );

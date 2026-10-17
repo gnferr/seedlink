@@ -1,11 +1,9 @@
 import * as THREE from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
+import { blockBox } from "./blockGeometry";
 import { QUIET_ZONE } from "./qr";
 import type { Block } from "./solver";
 import type { Theme } from "./themes";
-
-const BLOCK_HEIGHT = 1.6;
-const HALF_BLOCK = BLOCK_HEIGHT / 2;
 
 function download(href: string, filename: string): void {
   const a = document.createElement("a");
@@ -14,7 +12,7 @@ function download(href: string, filename: string): void {
   a.click();
 }
 
-/** Reads the preserved drawing buffer; callers gate on a settled, verified Scan frame. */
+/** Reads the preserved drawing buffer; callers gate on a settled frame whose code verified. */
 export function exportPng(canvas: HTMLCanvasElement, filename: string): void {
   download(canvas.toDataURL("image/png"), filename);
 }
@@ -38,14 +36,9 @@ export async function exportGlb(blocks: Block[], size: number, theme: Theme, fil
     const offset = (size - 1) / 2;
     for (const b of blocks) {
       const mesh = new THREE.Mesh(box, materials[b.region ?? "body"]);
-      if (b.grounded) {
-        const h = Math.max(HALF_BLOCK, b.y + HALF_BLOCK);
-        mesh.position.set(b.x - offset, h / 2, b.z - offset);
-        mesh.scale.set(1, h, 1);
-      } else {
-        mesh.position.set(b.x - offset, b.y, b.z - offset);
-        mesh.scale.set(1, BLOCK_HEIGHT, 1);
-      }
+      const { x, y, z, h } = blockBox(b, offset);
+      mesh.position.set(x, y, z);
+      mesh.scale.set(1, h, 1);
       scene.add(mesh);
     }
 

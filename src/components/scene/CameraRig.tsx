@@ -5,6 +5,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, OrthographicCamera } from "@react-three/drei";
 import gsap from "gsap";
 import * as THREE from "three";
+import { HALF_BLOCK } from "@/lib/blockGeometry";
 import { QUIET_ZONE } from "@/lib/qr";
 import type { Block } from "@/lib/solver";
 import { FIT_MARGIN } from "@/lib/scanFit";
@@ -124,11 +125,20 @@ export default function CameraRig({
   useEffect(() => {
     blocksRef.current = blocks;
   }, [blocks]);
+  // Tween end zoom, computed once per tween (Explore's fit walks every block); a resize rescales it.
+  const toZoom = useRef(0);
   const viewDir = useRef(new THREE.Vector3());
   const revealDir = useMemo(() => revealDirection(elevationDeg), [elevationDeg]);
   const revealTarget = useMemo(
     () => revealPose(plane, elevationDeg, 1, 1).target,
     [plane, elevationDeg],
+  );
+
+  // The camera sits 2·plane from a look-at within plane/2 of the origin; the scene fits in a sphere of
+  // plane/√2 + tallest block. Their sum bounds every depth; 4·plane adds margin.
+  const depth = useMemo(
+    () => 4 * plane + blocks.reduce((m, b) => Math.max(m, b.y + HALF_BLOCK), 0),
+    [plane, blocks],
   );
 
   const fitZoom = (s: ViewState) => {
@@ -160,6 +170,7 @@ export default function CameraRig({
     const fromUp = cam.up.clone();
     const fromZoom = cam.zoom;
     const fromTarget = fromPos.clone().add(cam.getWorldDirection(new THREE.Vector3()).multiplyScalar(plane * 2));
+    toZoom.current = fitZoom(state);
     const p = { t: 0 };
     const pos = new THREE.Vector3();
     const tgt = new THREE.Vector3();
@@ -173,7 +184,7 @@ export default function CameraRig({
         pos.lerpVectors(fromPos, to.position, p.t);
         tgt.lerpVectors(fromTarget, to.target, p.t);
         up.lerpVectors(fromUp, to.up, p.t).normalize();
-        apply(pos, tgt, up, fromZoom + (fitZoom(state) - fromZoom) * p.t);
+        apply(pos, tgt, up, fromZoom + (toZoom.current - fromZoom) * p.t);
       },
       onComplete: () => {
         if (state === "EXPLORE") setReadyState(state);
@@ -195,7 +206,9 @@ export default function CameraRig({
     const before = fitZoom(state);
     sizeRef.current = { width, height };
     if (!cam) return;
-    cam.zoom *= fitZoom(state) / before;
+    const k = fitZoom(state) / before;
+    cam.zoom *= k;
+    toZoom.current *= k;
     cam.updateProjectionMatrix();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [width, height]);
@@ -214,7 +227,7 @@ export default function CameraRig({
 
   return (
     <>
-      <OrthographicCamera ref={camRef} makeDefault near={-500} far={500} />
+      <OrthographicCamera ref={camRef} makeDefault near={-depth} far={depth} />
       {state === "EXPLORE" && controlsOn && (
         <OrbitControls makeDefault target={revealTarget.toArray()} />
       )}
