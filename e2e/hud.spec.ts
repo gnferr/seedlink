@@ -5,6 +5,9 @@ async function ready(page: Page) {
   await expect(page.locator("canvas")).toBeVisible({ timeout: 15_000 });
 }
 
+// Two frames: any state change a key press caused has rendered, so a "nothing changed" check is not vacuous.
+const flush = (page: Page) => page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+
 const view = (page: Page, name: string) => page.getByRole("button", { name, exact: true });
 
 test("E7 hotkeys: 1/2/3 switch views, but not while typing or with Ctrl", async ({ page }) => {
@@ -20,19 +23,27 @@ test("E7 hotkeys: 1/2/3 switch views, but not while typing or with Ctrl", async 
   await page.keyboard.press("1");
   await expect(explore).toHaveAttribute("aria-pressed", "true");
 
-  // Typing in the field is typing, not a hotkey.
+  // Typing in the field is typing, not a hotkey; the later plain 3 proves the app was alive and only it took effect.
   const field = page.getByRole("textbox", { name: "Link or text" });
   await field.fill("");
   await field.press("2");
+  await flush(page);
+  await expect(explore).toHaveAttribute("aria-pressed", "true");
+  await field.blur();
+  await page.keyboard.press("3");
+  await expect(scan).toHaveAttribute("aria-pressed", "true");
+  await expect(reveal).toHaveAttribute("aria-pressed", "false");
   await expect(field).toHaveValue("2");
+  await page.keyboard.press("1");
   await expect(explore).toHaveAttribute("aria-pressed", "true");
 
-  // A modifier means the browser's shortcut, not ours.
-  await field.blur();
+  // A modifier means the browser's shortcut, not ours; the plain 3 afterwards proves the app was alive in between.
   await page.keyboard.press("Control+3");
   await page.keyboard.press("Control+2");
+  await flush(page);
   await expect(explore).toHaveAttribute("aria-pressed", "true");
-  await expect(scan).toHaveAttribute("aria-pressed", "false");
+  await page.keyboard.press("3");
+  await expect(scan).toHaveAttribute("aria-pressed", "true");
   await expect(reveal).toHaveAttribute("aria-pressed", "false");
 });
 
@@ -89,9 +100,9 @@ for (const size of [
     await page.getByRole("button", { name: "Collapse controls" }).click();
     await expect(page.getByRole("button", { name: "Expand controls" })).toBeVisible();
 
-    await expect(page.locator("p[role=status]").first()).toBeInViewport();
-    for (const n of ["Explore", "Reveal", "Scan"]) await expect(view(page, n)).toBeInViewport();
-    await expect(page.getByRole("radiogroup", { name: "Season" })).toBeInViewport();
+    await expect(page.getByRole("status").filter({ hasText: /scan|check|code/i })).toBeInViewport({ ratio: 1 });
+    for (const n of ["Explore", "Reveal", "Scan"]) await expect(view(page, n)).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole("radiogroup", { name: "Season" })).toBeInViewport({ ratio: 1 });
     await expect(page.getByRole("textbox", { name: "Link or text" })).toBeHidden();
   });
 }
@@ -136,7 +147,7 @@ const box = async (page: Page) => (await hud(page).boundingBox())!;
 test("the HUD fits on desktop", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await ready(page);
-  expect((await box(page)).width).toBeLessThanOrEqual(0.31 * 1440);
+  await expect.poll(async () => (await box(page)).width).toBeLessThanOrEqual(0.3 * 1440);
   await noScroll(page);
   await page.getByRole("button", { name: "Collapse controls" }).click();
   await expect(page.getByRole("button", { name: "Expand controls" })).toBeVisible();
@@ -146,10 +157,10 @@ test("the HUD fits on desktop", async ({ page }) => {
 test("the HUD fits on a phone", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await ready(page);
-  const status = page.locator("p[role=status]").first();
+  const status = page.getByRole("status").filter({ hasText: /scan|check|code/i });
 
   // Collapsed dock (the phone default), including the Scan and Won't-scan states.
-  expect((await box(page)).height).toBeLessThanOrEqual(96);
+  await expect.poll(async () => (await box(page)).height).toBeLessThanOrEqual(96);
   await noScroll(page);
   await view(page, "Scan").click();
   await expect(status).toContainText(/^Scans/, { timeout: 10_000 });
@@ -167,7 +178,7 @@ test("the HUD fits on a phone", async ({ page }) => {
   for (const [short, name] of [["Su", "Summer"], ["Au", "Autumn"], ["Wi", "Winter"], ["Sp", "Spring"]]) {
     const radio = page.getByRole("radio", { name });
     await expect(radio).toBeVisible();
-    await expect(radio).toContainText(short);
+    await expect(radio.locator('span[aria-hidden="true"]')).toHaveText(short);
   }
 
   await page.getByRole("button", { name: "Expand controls" }).click();
