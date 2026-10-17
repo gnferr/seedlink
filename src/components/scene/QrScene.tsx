@@ -6,8 +6,10 @@ import { createEnvironment } from "@/lib/motion";
 import { QUIET_ZONE } from "@/lib/qr";
 import type { Block } from "@/lib/solver";
 import type { Theme } from "@/lib/themes";
+import type { Season } from "@/lib/seasons";
 import Blocks from "./Blocks";
 import CameraRig, { type ViewState } from "./CameraRig";
+import EnvironmentDriver from "./EnvironmentDriver";
 
 export default function QrScene({
   blocks,
@@ -19,6 +21,8 @@ export default function QrScene({
   onCanvasReady,
   onSettled,
   ambientMotion = true,
+  season = "SUMMER",
+  shakeTick = 0,
 }: {
   blocks: Block[];
   size: number;
@@ -29,6 +33,8 @@ export default function QrScene({
   onCanvasReady: (canvas: HTMLCanvasElement) => void;
   onSettled?: (state: ViewState) => void;
   ambientMotion?: boolean;
+  season?: Season;
+  shakeTick?: number;
 }) {
   const env = useState(() => {
     const e = createEnvironment();
@@ -63,6 +69,13 @@ export default function QrScene({
         ambientMotion={ambientMotion}
       />
       <Blocks blocks={blocks} size={size} theme={theme} flatten={state === "SCAN"} env={env} />
+      <EnvironmentDriver
+        env={env}
+        season={season}
+        state={state}
+        background={theme.background}
+        shakeTick={shakeTick}
+      />
     </Canvas>
   );
 }
