@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { Canvas } from "@react-three/fiber";
 import { blockBox } from "@/lib/blockGeometry";
 import { createEnvironment } from "@/lib/motion";
-import { PARTICLE_SETS, particleBounds, particleBudget, particleSize } from "@/lib/particles";
+import { triggerShake } from "@/lib/motionTweens";
+import { PARTICLE_SETS, particleBounds, particleBudget, particleSize, pushBurst } from "@/lib/particles";
 import { nextLayers } from "@/lib/particleLayers";
 import { QUIET_ZONE } from "@/lib/qr";
 import type { Block } from "@/lib/solver";
@@ -27,6 +28,7 @@ export default function QrScene({
   ambientMotion = true,
   season = "SUMMER",
   shakeTick = 0,
+  pokeEnabled = true,
 }: {
   blocks: Block[];
   size: number;
@@ -39,6 +41,7 @@ export default function QrScene({
   ambientMotion?: boolean;
   season?: Season;
   shakeTick?: number;
+  pokeEnabled?: boolean;
 }) {
   const env = useState(() => {
     const e = createEnvironment(season);
@@ -64,6 +67,14 @@ export default function QrScene({
     );
   }, [blocks, size, plane]);
   const [bursts] = useState<{ current: Burst[] }>(() => ({ current: [] }));
+
+  const handlePoke = useCallback(
+    (origin: { x: number; y: number; z: number }, t0: number) => {
+      triggerShake(env, !ambientMotion);
+      if (ambientMotion) pushBurst(bursts.current, { t0, origin: { x: origin.x, y: origin.y, z: origin.z } }, t0);
+    },
+    [env, ambientMotion, bursts],
+  );
 
   // A new object per rig settle, so a repeat settle in the same state is still seen.
   const [settle, setSettle] = useState<{ state: ViewState; n: number } | null>(null);
@@ -125,7 +136,11 @@ export default function QrScene({
         env={env}
         ambientMotion={ambientMotion}
       />
-      <Blocks blocks={blocks} size={size} theme={theme} flatten={state === "SCAN"} env={env} />
+      <Blocks blocks={blocks} size={size} theme={theme} flatten={state === "SCAN"}
+        env={env}
+        pokeEnabled={pokeEnabled && state === "EXPLORE"}
+        onPoke={handlePoke}
+      />
       {layers.map((l) => (
         <ParticleLayer
           key={l.id}

@@ -112,3 +112,13 @@ export function burstPose(
   out.scale = Math.min(1, Math.max(0, 1 - age / BURST_LIFE_SECONDS));
   return out;
 }
+
+// ParticleLayer has slots for this many overlapping bursts (BURST_MAX particles each).
+export const BURST_CONCURRENT = 2;
+
+// Prunes expired bursts, drops the oldest past the cap, then appends; no allocation beyond the pushed entry.
+export function pushBurst<T extends { t0: number }>(list: T[], burst: T, now: number): void {
+  for (let i = list.length - 1; i >= 0; i--) if (now - list[i].t0 >= BURST_LIFE_SECONDS) list.splice(i, 1);
+  while (list.length >= BURST_CONCURRENT) list.shift();
+  list.push(burst);
+}

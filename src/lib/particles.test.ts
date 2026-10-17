@@ -143,3 +143,13 @@ for (const s of SEASONS) {
     assert.ok(best >= 1.4, `${s} best contrast ${best.toFixed(2)}`);
   });
 }
+
+test("pushBurst prunes expired bursts and caps simultaneous ones", async () => {
+  const { pushBurst, BURST_CONCURRENT } = await import("./particles.ts");
+  const list: { t0: number }[] = [{ t0: 0 }];
+  pushBurst(list, { t0: 5 }, 5);
+  assert.deepEqual(list, [{ t0: 5 }]);
+  for (let i = 1; i <= 5; i++) pushBurst(list, { t0: 5 + i * 0.01 }, 5 + i * 0.01);
+  assert.equal(list.length, BURST_CONCURRENT);
+  assert.equal(list[list.length - 1].t0, 5.05);
+});

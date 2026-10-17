@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { blockBox } from "@/lib/blockGeometry";
 import type { Environment } from "@/lib/motion";
@@ -17,12 +17,14 @@ function Group({
   theme,
   offset,
   material,
+  onClick,
 }: {
   blocks: Block[];
   color: string;
   theme: Theme;
   offset: number;
   material?: THREE.Material;
+  onClick?: (e: ThreeEvent<MouseEvent>) => void;
 }) {
   const ref = useRef<THREE.InstancedMesh>(null);
 
@@ -46,6 +48,7 @@ function Group({
       key={blocks.length}
       ref={ref}
       args={[undefined, undefined, blocks.length]}
+      onClick={onClick}
       {...(material && { material, frustumCulled: false })}
     >
       <boxGeometry args={[1, 1, 1]} />
@@ -76,12 +79,16 @@ export default function Blocks({
   flatten,
   size,
   env,
+  pokeEnabled = false,
+  onPoke,
 }: {
   blocks: Block[];
   theme: Theme;
   flatten: boolean;
   size: number;
   env: Environment;
+  pokeEnabled?: boolean;
+  onPoke?: (p: { x: number; y: number; z: number }, time: number) => void;
 }) {
   const offset = (size - 1) / 2;
   const height = useMemo(
@@ -91,6 +98,7 @@ export default function Blocks({
     }, 0),
     [blocks, offset],
   );
+  const clock = useThree((s) => s.clock);
   const canopyMaterial = useSwayMaterial("canopy", theme, height);
   const trunkMaterial = useSwayMaterial("trunk", theme, height);
 
@@ -108,6 +116,13 @@ export default function Blocks({
     f.summerColour = theme.regionColors.trunk;
     updateSwayMaterial(trunkMaterial, f);
   });
+
+  const poke = pokeEnabled && onPoke
+    ? (e: ThreeEvent<MouseEvent>) => {
+        if (e.delta > 3) return; // an orbit drag, not a click
+        onPoke(e.point, clock.elapsedTime);
+      }
+    : undefined;
 
   const groups = useMemo(() => {
     if (flatten) return [{ key: "scan", color: theme.colorScan, blocks }];
@@ -129,6 +144,7 @@ export default function Blocks({
           theme={theme}
           offset={offset}
           material={"material" in g ? g.material : undefined}
+          onClick={g.key === "trunk" || g.key === "canopy" ? poke : undefined}
         />
       ))}
     </>
