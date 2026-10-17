@@ -14,6 +14,7 @@ import type { Season } from "@/lib/seasons";
 import Blocks from "./Blocks";
 import CameraRig, { type ViewState } from "./CameraRig";
 import EnvironmentDriver from "./EnvironmentDriver";
+import Meadow from "./Meadow";
 import ParticleLayer, { type Burst } from "./ParticleLayer";
 
 export default function QrScene({
@@ -138,6 +139,8 @@ export default function QrScene({
         env={env}
         ambientMotion={ambientMotion}
       />
+      {/* Unmounted, not hidden, in Scan: the graded frame is pad, blocks and background only. */}
+      {state !== "SCAN" && <Meadow plane={plane} env={env} padColour={theme.colorLight} />}
       <Blocks blocks={blocks} size={size} theme={theme} flatten={state === "SCAN"}
         env={env}
         pokeEnabled={pokeEnabled && state === "EXPLORE"}

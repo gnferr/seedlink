@@ -7,7 +7,7 @@ import { SWAY_CHUNK, createSwayMaterial, updateSwayMaterial } from "./blockMater
 const SUMMER = "#3f9b3a";
 const opts = { roughness: 0.8, metalness: 0, height: 10 };
 
-const compile = (kind: "canopy" | "trunk") => {
+const compile = (kind: "canopy" | "trunk" | "grass") => {
   const m = createSwayMaterial(kind, opts);
   const fake = { uniforms: {} as Record<string, { value: number }>, vertexShader: "#include <begin_vertex>\n" };
   // @ts-expect-error a minimal stand-in for three's shader object and renderer
@@ -65,4 +65,26 @@ test("the trunk has no sway weight", () => {
   const { fake } = compile("trunk");
   assert.equal(fake.uniforms.uSwayWeight.value, 0);
   assert.equal(fake.uniforms.uShakeWeight.value, 0.3);
+});
+
+test("grass carries the gated chunk, writes a zero gate, and sways less than the canopy without shaking", () => {
+  const { m, fake } = compile("grass");
+  assert.ok(fake.vertexShader.includes("#include <begin_vertex>\n" + SWAY_CHUNK));
+  const env = createEnvironment();
+  env.gate.stateGain = 0;
+  updateSwayMaterial(m, { time: 3, env, summerColour: SUMMER, kind: "grass" });
+  assert.equal(fake.uniforms.uStateGain.value, 0);
+  const canopy = compile("canopy").fake.uniforms;
+  assert.ok(fake.uniforms.uSwayWeight.value > 0);
+  assert.ok(fake.uniforms.uSwayWeight.value < canopy.uSwayWeight.value);
+  assert.equal(fake.uniforms.uShakeWeight.value, 0);
+});
+
+test("grass keeps the colour the meadow gives it", () => {
+  const { m } = compile("grass");
+  m.color.set("#123456");
+  const env = createEnvironment();
+  env.phase.value = 2;
+  updateSwayMaterial(m, { time: 0, env, summerColour: SUMMER, kind: "grass" });
+  assert.equal(m.color.getHexString(), "123456");
 });

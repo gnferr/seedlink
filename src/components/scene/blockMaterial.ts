@@ -3,7 +3,7 @@ import { SHAKE_CAP, SWAY_CAP } from "../../lib/motion.ts";
 import type { Environment } from "../../lib/motion.ts";
 import { phaseColour, wrapPhase } from "../../lib/seasons.ts";
 
-export type SwayKind = "canopy" | "trunk";
+export type SwayKind = "canopy" | "trunk" | "grass";
 type Uniforms = Record<string, { value: number }>;
 export type SwayMaterial = THREE.MeshStandardMaterial & {
   userData: { uniforms: Uniforms; lastPhase: number; lastColour: string };
@@ -19,7 +19,12 @@ if (uStateGain != 0.0) {
   vec3 swayP = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
   float swayPh = swayP.x * 0.35 + swayP.z * 0.5;
   float swayW = 0.0;
-  if (uSwayHeight > 0.0) swayW = smoothstep(0.0, 1.0, clamp(swayP.y / uSwayHeight, 0.0, 1.0));
+#ifdef SWAY_LOCAL
+  float swayY = position.y;
+#else
+  float swayY = swayP.y;
+#endif
+  if (uSwayHeight > 0.0) swayW = smoothstep(0.0, 1.0, clamp(swayY / uSwayHeight, 0.0, 1.0));
   float swayG = ${glslFloat(SWAY_CAP)} * uStateGain * uCalm * swayW * uSwayWeight;
   float shakeG = ${glslFloat(SHAKE_CAP)} * uStateGain * uShake * uShakeWeight;
   transformed.x += swayG * sin(1.7 * uTime + swayPh) + shakeG * sin(23.0 * uTime + swayPh);
@@ -27,6 +32,9 @@ if (uStateGain != 0.0) {
 }
 #endif
 `;
+
+// Grass sways at half the canopy's cap and never shakes.
+export const GRASS_SWAY_WEIGHT = 0.5;
 
 const DECLARATIONS =
   "uniform float uTime, uStateGain, uCalm, uShake, uSwayHeight, uSwayWeight, uShakeWeight;\n";
@@ -42,9 +50,11 @@ export function createSwayMaterial(
     uCalm: { value: 0 },
     uShake: { value: 0 },
     uSwayHeight: { value: Number.isFinite(o.height) && o.height > 0 ? o.height : 0 },
-    uSwayWeight: { value: kind === "canopy" ? 1 : 0 },
-    uShakeWeight: { value: kind === "canopy" ? 1 : 0.3 },
+    uSwayWeight: { value: { canopy: 1, trunk: 0, grass: GRASS_SWAY_WEIGHT }[kind] },
+    uShakeWeight: { value: { canopy: 1, trunk: 0.3, grass: 0 }[kind] },
   };
+  // Grass stands on the ground (instance y ~ 0), so its weight comes from the blade's own height.
+  if (kind === "grass") m.defines = { ...m.defines, SWAY_LOCAL: "" };
   m.userData = { uniforms, lastPhase: NaN, lastColour: "" };
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
@@ -69,6 +79,8 @@ export function updateSwayMaterial(
   u.uCalm.value = Number.isFinite(calm) ? calm : 0;
   u.uShake.value = Number.isFinite(shake) ? shake : 0;
 
+  // The meadow tints grass from the ground palette itself.
+  if (f.kind === "grass") return;
   const phase = wrapPhase(f.env.phase.value);
   if (phase !== m.userData.lastPhase || f.summerColour !== m.userData.lastColour) {
     m.color.set(phaseColour(f.summerColour, f.kind, phase));

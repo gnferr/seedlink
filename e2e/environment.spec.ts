@@ -52,7 +52,7 @@ const readCanvas = <R, A>(page: Page, fn: (d: { w: number; h: number; data: Uint
     [fn.toString(), arg] as const,
   );
 
-/** Canvas-relative CSS coordinates of a lit canopy pixel (green-dominant), nearest the centroid of all of them. */
+/** Canvas-relative CSS coordinates of a lit trunk pixel (brown) in the middle 60% of the frame, nearest the centroid of all of them. The trunk, not the canopy: the meadow's grass is green too; the middle, so the slab's dirt edge is never picked. */
 async function findPixel(page: Page) {
   const box = (await page.locator("canvas").boundingBox())!;
   const r = await page.locator("canvas").evaluate((c: HTMLCanvasElement) => {
@@ -63,7 +63,9 @@ async function findPixel(page: Page) {
     g.drawImage(c, 0, 0);
     const d = g.getImageData(0, 0, c.width, c.height).data;
     const hits: number[] = [];
-    for (let i = 0; i < d.length; i += 4) if (d[i + 1] > d[i] + 20 && d[i + 1] > d[i + 2] + 20 && d[i + 1] > 90) hits.push(i / 4);
+    const mid = (p: number) => Math.abs((p % c.width) / c.width - 0.5) < 0.3 && Math.abs(Math.floor(p / c.width) / c.height - 0.5) < 0.3;
+    for (let i = 0; i < d.length; i += 4)
+      if (d[i] > d[i + 1] + 30 && d[i + 1] > d[i + 2] + 10 && d[i] > 60 && d[i] < 200 && mid(i / 4)) hits.push(i / 4);
     if (!hits.length) return null;
     let cx = 0, cy = 0;
     for (const p of hits) { cx += p % c.width; cy += Math.floor(p / c.width); }
@@ -75,7 +77,7 @@ async function findPixel(page: Page) {
     }
     return { x: (best % c.width) * (c.clientWidth / c.width), y: Math.floor(best / c.width) * (c.clientHeight / c.height) };
   });
-  expect(r, "a canopy pixel in the frame").not.toBeNull();
+  expect(r, "a trunk pixel in the frame").not.toBeNull();
   return { x: box.x + r!.x, y: box.y + r!.y };
 }
 
@@ -450,6 +452,8 @@ test("losing the WebGL context blocks export until the scan re-verifies", async 
 
 test("remount shows the current season", async ({ page }) => {
   await ready(page);
+  // The lowest Reveal keeps sky in the top-left corner; higher, the meadow fills the frame.
+  await page.getByLabel("Reveal elevation").fill("15");
   await view(page, "REVEAL");
   await settled(page, "REVEAL");
   const summer = await cornerStable(page);

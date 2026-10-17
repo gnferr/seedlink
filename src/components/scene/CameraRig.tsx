@@ -140,10 +140,10 @@ export default function CameraRig({
     [plane, elevationDeg],
   );
 
-  // The camera sits 2·plane from a look-at within plane/2 of the origin; the scene fits in a sphere of
-  // plane/√2 + tallest block. Their sum bounds every depth; 4·plane adds margin.
+  // The camera sits 2·plane from a look-at within plane/2 of the origin; the meadow slab (5·plane square,
+  // half-diagonal ~3.54·plane) and the tallest block bound the scene. 7·plane covers their sum with margin.
   const depth = useMemo(
-    () => 4 * plane + blocks.reduce((m, b) => Math.max(m, b.y + HALF_BLOCK), 0),
+    () => 7 * plane + blocks.reduce((m, b) => Math.max(m, b.y + HALF_BLOCK), 0),
     [plane, blocks],
   );
 
@@ -246,7 +246,8 @@ export default function CameraRig({
     <>
       <OrthographicCamera ref={camRef} makeDefault near={-depth} far={depth} />
       {state === "EXPLORE" && controlsOn && (
-        <OrbitControls makeDefault target={revealTarget.toArray()} />
+        // No lower than Reveal's lowest elevation: below it the meadow slab hides the sculpture or ends in the frame.
+        <OrbitControls makeDefault target={revealTarget.toArray()} maxPolarAngle={Math.PI / 2 - (ELEVATION_MIN_DEG * Math.PI) / 180} />
       )}
     </>
   );
