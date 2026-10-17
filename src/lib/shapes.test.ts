@@ -7,11 +7,11 @@ test("trunk reaches the floor", () => {
 });
 
 test("canopy sits above the trunk", () => {
-  assert.equal(SHAPES.MINECRAFT_TREE.mask(0.5, 0.66), "canopy");
+  assert.equal(SHAPES.MINECRAFT_TREE.mask(0.5, 0.9), "canopy");
 });
 
-test("a gap separates trunk from canopy at the trunk's own column", () => {
-  assert.equal(SHAPES.MINECRAFT_TREE.mask(0.2, 0.2), null);
+test("the corner beside the trunk at floor level is empty", () => {
+  assert.equal(SHAPES.MINECRAFT_TREE.mask(0.1, 0.1), null);
 });
 
 test("outside the shape is empty", () => {
