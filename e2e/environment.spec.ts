@@ -513,3 +513,19 @@ test("first Reveal frame is still", async ({ page }) => {
   expect(later === atSettle, "frame at settle differs from the frame 500 ms later").toBe(true);
   expect((await captureCanvas(page)) === later, "Reveal keeps moving").toBe(true);
 });
+
+test("a Shake in flight survives an elevation change and still decays", async ({ page }) => {
+  test.setTimeout(60_000);
+  await ready(page);
+  await settled(page, "EXPLORE");
+  await page.getByRole("button", { name: "Shake" }).click();
+  const slider = page.getByLabel("Reveal elevation", { exact: true });
+  await slider.focus();
+  await page.keyboard.press("ArrowRight"); // re-keys the camera rig inside the 0.9 s shake
+  await settled(page, "EXPLORE");
+  await page.waitForTimeout(1500);
+  // Back at the aligned pose nothing may move: a stranded shake would jitter the tree here.
+  const a = await captureCanvas(page);
+  await page.waitForTimeout(500);
+  expect(await captureCanvas(page) === a, "a stranded shake keeps jittering the aligned pose").toBe(true);
+});

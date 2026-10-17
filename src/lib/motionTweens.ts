@@ -21,6 +21,11 @@ export function rampStateGain(env: Environment, target: 0 | 1, seconds: number, 
   });
 }
 
+/** Cancels an in-flight stateGain ramp only: a shake decay (or any other gate tween) keeps running. */
+export function killStateGainTween(env: Environment): void {
+  gsap.killTweensOf(env.gate, "stateGain");
+}
+
 export function restGate(env: Environment): void {
   gsap.killTweensOf(env.gate);
   env.gate.stateGain = 0;

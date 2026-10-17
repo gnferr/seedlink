@@ -11,7 +11,7 @@ import type { Block } from "@/lib/solver";
 import { FIT_MARGIN } from "@/lib/scanFit";
 import { ELEVATION_MAX_DEG, ELEVATION_MIN_DEG } from "@/lib/solver";
 import { RAMP_DOWN_SECONDS, RAMP_UP_SECONDS, calmFor, type Environment } from "@/lib/motion";
-import { rampStateGain, restGate, setCalm, stillGate } from "@/lib/motionTweens";
+import { killStateGainTween, rampStateGain, restGate, setCalm, stillGate } from "@/lib/motionTweens";
 
 export type ViewState = "EXPLORE" | "REVEAL" | "SCAN";
 
@@ -174,7 +174,7 @@ export default function CameraRig({
     if (still) {
       stillGate(env, instant ? 0 : RAMP_DOWN_SECONDS);
       setCalm(env, 0);
-    } else gsap.killTweensOf(env.gate);
+    } else killStateGainTween(env);
 
     // Look-at point is not stored on the camera, so project it along the current view axis.
     const fromPos = cam.position.clone();
@@ -208,7 +208,7 @@ export default function CameraRig({
     });
     return () => {
       tween.kill();
-      gsap.killTweensOf(env.gate);
+      killStateGainTween(env);
     };
     // Size is read through sizeRef so a resize never restarts the tween.
     // eslint-disable-next-line react-hooks/exhaustive-deps
