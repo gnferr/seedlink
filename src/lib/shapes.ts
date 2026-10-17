@@ -1,4 +1,4 @@
-import { defineSprite } from "./sprite.ts";
+import { defineSprite, type SpriteSpec } from "./sprite.ts";
 
 export type ShapeRegion = "trunk" | "canopy" | "body";
 
@@ -8,7 +8,7 @@ export interface Shape {
   mask: (a: number, b: number) => ShapeRegion | null;
 }
 
-const OAK = {
+const OAK: SpriteSpec = {
   id: "MINECRAFT_TREE",
   label: "Minecraft Tree",
   rows: [
@@ -28,7 +28,10 @@ const OAK = {
     ".....TTTT.....",
   ],
   legend: { L: "canopy", T: "trunk" },
-} as const;
+};
+
+/** Source specs of every sprite shape, exported so tests can validate them. */
+export const SPRITE_SPECS: readonly SpriteSpec[] = [OAK];
 
 const MINECRAFT_TREE = defineSprite(OAK);
 

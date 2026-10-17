@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SHAPES } from "./shapes.ts";
+import { SHAPES, SPRITE_SPECS } from "./shapes.ts";
 import { defineSprite, validateSprite, type SpriteSpec } from "./sprite.ts";
 
 const rows = [
@@ -29,6 +29,8 @@ test("outside the unit square is empty", () => {
   assert.equal(s.mask(-0.01, 0.5), null);
   assert.equal(s.mask(0.5, 1.01), null);
   assert.equal(s.mask(NaN, 0.5), null);
+  assert.equal(s.mask(Infinity, 0.5), null);
+  assert.equal(s.mask(0.5, -Infinity), null);
 });
 
 test("validateSprite throws", () => {
@@ -40,11 +42,15 @@ test("validateSprite throws", () => {
   bad({ rows: [...rows.slice(0, 7), "........"] }, "cannot ground");
   bad({ rows: rows.slice(1) }, "at least 8 rows");
   bad({ rows: rows.map((r) => r.slice(0, 7)) }, "at least 8 columns");
+  bad({ legend: { L: "canopy", T: "trunk", TT: "trunk" } }, "exactly one character");
+  bad({ legend: { L: "canopy", T: "trunk", ".": "body" } }, "reserved");
   bad({ id: "" }, "non-empty id");
 });
 
-test("every registry shape validates", () => {
+test("every registry sprite validates and is at least 8x8", () => {
+  for (const sp of SPRITE_SPECS) validateSprite(sp);
   for (const s of Object.values(SHAPES)) {
-    assert.equal(typeof s.mask, "function");
+    const { width, height } = s as { width?: number; height?: number };
+    if (width !== undefined) assert.ok(width >= 8 && (height ?? 0) >= 8, s.id);
   }
 });

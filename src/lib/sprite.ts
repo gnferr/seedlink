@@ -24,6 +24,8 @@ export function validateSprite(spec: SpriteSpec): void {
     }
   }
   for (const [k, v] of Object.entries(legend)) {
+    if (k.length !== 1) throw new Error(`sprite ${id}: legend key "${k}" must be exactly one character`);
+    if (k === ".") throw new Error(`sprite ${id}: legend key "." is reserved for empty cells`);
     if (!REGIONS.includes(v)) throw new Error(`sprite ${id}: legend "${k}" has invalid region`);
   }
   if (/^\.*$/.test(rows[rows.length - 1])) {
