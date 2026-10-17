@@ -1,3 +1,6 @@
+/** Worst-case dark/light contrast below which a code is refused, even when the populations are ordered. */
+export const MIN_SCAN_CONTRAST = 3;
+
 export type Separation = { matched: number; total: number; worstCaseContrast: number; separated: boolean };
 
 function linearise(channel: number): number {
@@ -20,7 +23,8 @@ export function contrastRatio(l1: number, l2: number): number {
 /**
  * Judges whether dark and light module luminances (0-255 luma) are cleanly split.
  * `matched` counts samples on the correct side of the midpoint between the brightest
- * dark and the dimmest light; `total` is the number of samples in both arrays.
+ * dark and the dimmest light; `total` is the number of samples in both arrays. `separated` needs
+ * the populations ordered and their closest pair at least MIN_SCAN_CONTRAST apart.
  */
 export function classifySeparation(darkLums: number[], lightLums: number[]): Separation {
   const total = darkLums.length + lightLums.length;
@@ -40,6 +44,16 @@ export function classifySeparation(darkLums: number[], lightLums: number[]): Sep
     matched,
     total,
     worstCaseContrast,
-    separated: brightestDark < dimmestLight,
+    // NaN fails both comparisons, so an off-buffer sample never passes.
+    separated: brightestDark < dimmestLight && worstCaseContrast >= MIN_SCAN_CONTRAST,
   };
+}
+
+/** Why a failed check failed, in words; empty for a pass. */
+export function failureReason(s: Separation): string {
+  if (s.separated) return "";
+  if (!Number.isFinite(s.worstCaseContrast)) return "part of the code is out of view";
+  if (s.worstCaseContrast < MIN_SCAN_CONTRAST)
+    return `contrast ${s.worstCaseContrast.toFixed(1)}:1, needs ${MIN_SCAN_CONTRAST}:1`;
+  return "dark and light modules overlap";
 }

@@ -1,4 +1,4 @@
-import type { Separation } from "@/lib/verify";
+import { failureReason, type Separation } from "@/lib/verify";
 
 const ICON = {
   ok: "M5 12.5l4.5 4.5L19 7.5",
@@ -11,7 +11,9 @@ export default function ScanStatus({ separation }: { separation: Separation | nu
   const label =
     separation === null
       ? "Checking…"
-      : `${separation.separated ? "Scans" : "Won't scan"} — ${separation.matched}/${separation.total} modules, ${separation.worstCaseContrast.toFixed(1)}:1`;
+      : separation.separated
+        ? `Scans — ${separation.matched}/${separation.total} modules, ${separation.worstCaseContrast.toFixed(1)}:1`
+        : `Won't scan — ${failureReason(separation)} · ${separation.matched}/${separation.total} modules`;
   return (
     <p
       role="status"
