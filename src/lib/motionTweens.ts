@@ -28,6 +28,17 @@ export function restGate(env: Environment): void {
   env.gate.shake = 0;
 }
 
+/** Retargets the gate toward rest: kills every gate tween, ramps stateGain to 0 and kills any shake. */
+export function stillGate(env: Environment, seconds: number): void {
+  gsap.killTweensOf(env.gate);
+  env.gate.shake = 0;
+  rampStateGain(env, 0, seconds);
+}
+
+export function setCalm(env: Environment, calm: number): void {
+  env.gate.calm = calm;
+}
+
 export function sweepSeason(env: Environment, season: Season, reduced: boolean): void {
   gsap.killTweensOf(env.phase);
   const end = seasonIndex(season);

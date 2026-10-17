@@ -18,6 +18,7 @@ export default function QrScene({
   onProximityChange,
   onCanvasReady,
   onSettled,
+  ambientMotion = true,
 }: {
   blocks: Block[];
   size: number;
@@ -27,6 +28,7 @@ export default function QrScene({
   onProximityChange: (p: number) => void;
   onCanvasReady: (canvas: HTMLCanvasElement) => void;
   onSettled?: (state: ViewState) => void;
+  ambientMotion?: boolean;
 }) {
   const env = useState(() => createEnvironment())[0];
   const plane = size + QUIET_ZONE * 2;
@@ -52,6 +54,8 @@ export default function QrScene({
         blocks={blocks}
         onProximityChange={onProximityChange}
         onSettled={onSettled}
+        env={env}
+        ambientMotion={ambientMotion}
       />
     </Canvas>
   );

@@ -10,6 +10,8 @@ import { QUIET_ZONE } from "@/lib/qr";
 import type { Block } from "@/lib/solver";
 import { FIT_MARGIN } from "@/lib/scanFit";
 import { ELEVATION_MAX_DEG, ELEVATION_MIN_DEG } from "@/lib/solver";
+import { RAMP_DOWN_SECONDS, RAMP_UP_SECONDS, calmFor, type Environment } from "@/lib/motion";
+import { rampStateGain, restGate, setCalm, stillGate } from "@/lib/motionTweens";
 
 export type ViewState = "EXPLORE" | "REVEAL" | "SCAN";
 
@@ -102,6 +104,8 @@ export default function CameraRig({
   blocks,
   onProximityChange,
   onSettled,
+  env,
+  ambientMotion,
 }: {
   state: ViewState;
   size: number;
@@ -109,8 +113,10 @@ export default function CameraRig({
   /** Frames the Explore orbit. */
   blocks: Block[];
   onProximityChange: (p: number) => void;
-  /** Fired when a state tween completes, and on instant placement. */
+  /** Fired when a state tween completes, and on instant placement; for Reveal/Scan only once the gate is at exact rest. */
   onSettled?: (state: ViewState) => void;
+  env: Environment;
+  ambientMotion: boolean;
 }) {
   const camRef = useRef<THREE.OrthographicCamera>(null);
   const { width, height } = useThree((s) => s.size);
@@ -164,6 +170,9 @@ export default function CameraRig({
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const instant = !placed.current || reduced;
     placed.current = true;
+    const still = state !== "EXPLORE";
+    if (still) stillGate(env, instant ? 0 : RAMP_DOWN_SECONDS);
+    else gsap.killTweensOf(env.gate);
 
     // Look-at point is not stored on the camera, so project it along the current view axis.
     const fromPos = cam.position.clone();
@@ -187,12 +196,17 @@ export default function CameraRig({
         apply(pos, tgt, up, fromZoom + (toZoom.current - fromZoom) * p.t);
       },
       onComplete: () => {
-        if (state === "EXPLORE") setReadyState(state);
+        if (still) restGate(env);
+        else {
+          rampStateGain(env, 1, reduced ? 0 : RAMP_UP_SECONDS);
+          setReadyState(state);
+        }
         onSettled?.(state);
       },
     });
     return () => {
       tween.kill();
+      gsap.killTweensOf(env.gate);
     };
     // Size is read through sizeRef so a resize never restarts the tween.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -215,11 +229,12 @@ export default function CameraRig({
 
   useFrame(() => {
     const cam = camRef.current;
-    if (!cam || state !== "EXPLORE" || !controlsOn) return;
+    if (!cam || state !== "EXPLORE") return;
     // View direction, not position: panning moves camera and target together without changing the view.
     const angle = cam.getWorldDirection(viewDir.current).negate().angleTo(revealDir);
     const p = proximityFor(angle);
-    if (Math.abs(p - lastProximity.current) >= PROXIMITY_EPSILON) {
+    setCalm(env, ambientMotion ? calmFor(p) : 0);
+    if (controlsOn && Math.abs(p - lastProximity.current) >= PROXIMITY_EPSILON) {
       lastProximity.current = p;
       onProximityChange(p);
     }

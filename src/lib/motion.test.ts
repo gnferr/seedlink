@@ -9,7 +9,7 @@ import {
   shakeOffset,
   swayOffset,
 } from "./motion.ts";
-import { restGate, rampStateGain, sweepSeason, triggerShake } from "./motionTweens.ts";
+import { restGate, rampStateGain, setCalm, stillGate, sweepSeason, triggerShake } from "./motionTweens.ts";
 
 const grid: { x: number; y: number; z: number; time: number }[] = [];
 for (const x of [-20, -3.5, 0, 7, 31])
@@ -143,4 +143,20 @@ test("shake matches golden values", () => {
   const b = shakeOffset({ x: -7.5, y: 6, z: 10, time: 1.7, height: 9, stateGain: 0.6, shake: 0.5 });
   assert.ok(Math.abs(b.dx - -0.08889152953110148) < 1e-12);
   assert.ok(Math.abs(b.dz - -0.0893796356638979) < 1e-12);
+});
+
+test("stillGate zeroes stateGain and shake at once when instant, leaving calm", () => {
+  const env = createEnvironment();
+  env.gate.shake = 0.6;
+  env.gate.calm = 0.4;
+  stillGate(env, 0);
+  assert.deepEqual(env.gate, { stateGain: 0, calm: 0.4, shake: 0 });
+});
+
+test("setCalm assigns the value as given", () => {
+  const env = createEnvironment();
+  setCalm(env, 0);
+  assert.equal(env.gate.calm, 0);
+  setCalm(env, 0.25);
+  assert.equal(env.gate.calm, 0.25);
 });
