@@ -585,7 +585,7 @@ git commit -m "feat: rebuild interface around the canvas"
 - Produces:
   ```ts
   export function exportPng(canvas: HTMLCanvasElement, filename: string): void;
-  export function exportGlb(blocks: Block[], theme: Theme, filename: string): Promise<void>;
+  export function exportGlb(blocks: Block[], size: number, theme: Theme, filename: string): Promise<void>;
   ```
 
 - [ ] **Step 1: Implement the exporters**

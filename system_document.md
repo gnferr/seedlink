@@ -141,7 +141,7 @@ Requirements:
 
 ### G. Scannability verification (FEAT_07)
 
-Render the scan view to an offscreen target and verify continuously:
+Verify the rendered scan view on entry to Scan, once the camera has settled, debounced on change; export requires a verified pass for the current inputs (no offscreen target, no continuous check):
 
 1. Sample the rendered pixels at every module centre.
 2. Compare the dark/light classification against the source matrix.
