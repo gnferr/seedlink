@@ -5,6 +5,14 @@ async function ready(page: Page) {
   await expect(page.locator("canvas")).toBeVisible({ timeout: 15_000 });
 }
 
+// Computed colours/outlines are interpolated while a CSS transition runs; wait until none are in flight.
+async function settled(page: Page) {
+  await page.waitForFunction(async () => {
+    await Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined)));
+    return document.getAnimations().length === 0;
+  }, undefined, { timeout: 5_000 });
+}
+
 test("the page never scrolls at phone size", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await ready(page);
@@ -26,6 +34,7 @@ test("every control is reachable by keyboard with a visible focus ring", async (
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   for (let i = 0; i < total + 3; i++) {
     await page.keyboard.press("Tab");
+    await settled(page);
     const r = await page.evaluate(() => {
       const el = document.activeElement as HTMLElement;
       if (!el || el === document.body) return null;
@@ -38,9 +47,12 @@ test("every control is reachable by keyboard with a visible focus ring", async (
     if (!r.ring) bad.push(r.name);
   }
   expect(bad, "controls focused without an outline").toEqual([]);
-  // Next's dev-only indicator (#next-logo) is not part of the app.
-  const expected = await page.locator("input, select, button:not(#next-logo)").count();
+  // A radiogroup is one Tab stop, so count visible controls that are in the tab order. Next's dev-only indicator (#next-logo) is not the app.
+  const expected = await page
+    .locator("input, select, button:not(#next-logo)")
+    .evaluateAll((els) => els.filter((e) => (e as HTMLElement).tabIndex >= 0 && (e as HTMLElement).getClientRects().length > 0).length);
   expect([...seen].length, [...seen].join(" | ")).toBe(expected);
+  expect([...seen].some((n) => n.includes("Summer")), "season dial reached").toBe(true);
 });
 
 // Test-local helper (ruling C2): WCAG contrast of every visible text node in the control panel
@@ -103,6 +115,7 @@ for (const scheme of ["light", "dark"] as const) {
     // Cover the disabled-export and Scan-status states too.
     await page.getByRole("button", { name: "Scan", exact: true }).click();
     await expect(page.getByRole("status").filter({ hasText: /modules/ })).toContainText(/^Scans/, { timeout: 10_000 });
+    await settled(page);
     const w = await worstTextContrast(page);
     console.log(`worst ${scheme}: ${w.ratio.toFixed(2)}:1 ${w.desc}`);
     expect(w.ratio, w.desc).toBeGreaterThanOrEqual(4.5);

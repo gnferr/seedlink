@@ -64,7 +64,7 @@ Open and not yet decided: deploy target, whether theming grows beyond the curren
 
 ## Brand Commitments
 
-None established. There is no name beyond the working title, no logo, no committed voice, and no existing identity to honor. Future work may propose these; it must not describe them as pre-existing.
+None established beyond one owner-directed commitment: the visual identity is **Indie Voxel Game — chunky, tactile, playful; the object leads.** It is defined in `system_document.md` §1 and §5.5. There is still no name beyond the working title, no logo, and no committed voice. Future work may propose these; it must not describe them as pre-existing.
 
 ## Evidence on Hand
 
@@ -80,6 +80,7 @@ Nothing else exists. There are no users yet, no testimonials, no case studies, n
 3. **No setup.** A user who pastes a URL and leaves immediately should get a good result. Every control is an option, never a prerequisite.
 4. **What leaves the app has to work elsewhere.** An export is only finished if it opens cleanly in the tool the user takes it to.
 5. **Stay client-side.** Capability is added without adding a server, an account, or a round trip.
+6. **Alive in Explore, honest in Reveal and Scan.** Ambient motion and effects belong to Explore; the aligned Reveal and Scan views stay still and exact.
 
 ## Accessibility & Inclusion
 

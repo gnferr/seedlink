@@ -2,10 +2,15 @@
 
 import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import ControlPanel, { type ColorKey } from "@/components/controls/ControlPanel";
+import { HudNote } from "@/components/hud/primitives";
+import { seasonName } from "@/components/hud/SeasonDial";
+import Hud, { type ColorKey } from "@/components/hud/Hud";
 import type { ViewState } from "@/components/scene/CameraRig";
 import { generateMatrix, type QrMatrix } from "@/lib/qr";
 import { exportGlb, exportPng } from "@/lib/exporters";
+import { useReducedMotion } from "@/lib/useReducedMotion";
+import { seasonTheme, type Season } from "@/lib/seasons";
+import { viewForKey } from "@/lib/hotkeys";
 import { sampleScan } from "@/lib/sampleScan";
 import { DEFAULT_SHAPE_ID, SHAPES } from "@/lib/shapes";
 import { solve } from "@/lib/solver";
@@ -14,7 +19,7 @@ import { failureReason, type Separation } from "@/lib/verify";
 
 const QrScene = dynamic(() => import("@/components/scene/QrScene"), {
   ssr: false,
-  loading: () => <CenterNote>Preparing the 3D view…</CenterNote>,
+  loading: () => <HudNote centered>Preparing the 3D view…</HudNote>,
 });
 
 const DEFAULT_URL = "https://example.com";
@@ -25,16 +30,6 @@ const VIEW_NAMES: Record<ViewState, string> = { EXPLORE: "explore", REVEAL: "rev
 
 type Qr = { text: string; matrix: QrMatrix };
 
-function CenterNote({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex h-full items-center justify-center p-6">
-      <p className="rounded-lg bg-white px-4 py-3 text-sm text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
-        {children}
-      </p>
-    </div>
-  );
-}
-
 // Canvas rethrows renderer-creation failures (no WebGL) into the tree; the panel stays usable.
 class SceneBoundary extends Component<{ children: React.ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -43,7 +38,7 @@ class SceneBoundary extends Component<{ children: React.ReactNode }, { failed: b
   }
   render() {
     return this.state.failed ? (
-      <CenterNote>3D view unavailable — your browser could not start WebGL.</CenterNote>
+      <HudNote centered>3D view unavailable — your browser could not start WebGL.</HudNote>
     ) : (
       this.props.children
     );
@@ -64,7 +59,14 @@ export default function Home() {
   const [scan, setScan] = useState<{ key: string; separation: Separation } | null>(null);
   // Bumped when a lost WebGL context comes back, so the Scan check runs again.
   const [glEpoch, setGlEpoch] = useState(0);
+  // null = auto (CSS: expanded from md up, docked below); the first toggle makes it explicit.
+  const [collapsed, setCollapsed] = useState<boolean | null>(null);
   const [glbError, setGlbError] = useState(false);
+  const [season, setSeason] = useState<Season>("SUMMER");
+  const [breeze, setBreeze] = useState(true);
+  const [shakeTick, setShakeTick] = useState(0);
+  const motionAllowed = !useReducedMotion();
+  const ambientMotion = breeze && motionAllowed;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Presets are starting points; a colour edit overrides only that field.
@@ -120,7 +122,10 @@ export default function Home() {
   }
   const settled = settledKey === camKey;
 
+  const shakeEnabled = mode === "EXPLORE" && motionAllowed;
+
   // Verify on demand: sample only once the camera has settled in Scan, debounced on change.
+  // Summer theme on purpose: Scan flattens every block and the background, so season never changes the sampled frame.
   const verifyKey = qr ? JSON.stringify([qr.text, shapeId, elevation, theme]) : "";
   useEffect(() => {
     if (!qr || mode !== "SCAN" || !settled) return;
@@ -130,6 +135,14 @@ export default function Home() {
     }, DEBOUNCE_MS);
     return () => clearTimeout(id);
   }, [qr, mode, settled, verifyKey, glEpoch]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const v = e.repeat ? null : viewForKey({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, target: e.target as HTMLElement | null });
+      if (v) setMode(v);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   // A result for different input is never shown.
   const separation = scan?.key === verifyKey ? scan.separation : null;
 
@@ -186,6 +199,8 @@ export default function Home() {
           <div
             role="img"
             aria-label={`3D QR code for "${qr.text}", shaped as a ${shape.label}, ${theme.label} theme, ${viewName} view.`}
+            data-view={mode}
+            data-settled={settled}
             className="absolute inset-0"
           >
             <SceneBoundary>
@@ -198,31 +213,28 @@ export default function Home() {
                 onProximityChange={setProximity}
                 onCanvasReady={onCanvasReady}
                 onSettled={onSettled}
+                season={season}
+                ambientMotion={ambientMotion}
+                shakeTick={shakeTick}
+                pokeEnabled={shakeEnabled}
               />
             </SceneBoundary>
           </div>
         ) : (
-          <CenterNote>Type or paste a link to build your object.</CenterNote>
+          <HudNote centered>Type or paste a link to build your object.</HudNote>
         )}
 
         {tooLong && (
-          <p
-            role="alert"
-            className="absolute inset-x-3 top-3 flex items-start gap-2 rounded-lg border border-red-700 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-[0_6px_16px_-6px_rgb(0_0_0/0.3)] md:inset-x-auto md:left-4 md:max-w-md dark:border-red-400 dark:bg-red-950 dark:text-red-200"
-          >
-            <svg aria-hidden="true" viewBox="0 0 20 20" className="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <circle cx="10" cy="10" r="7.5" />
-              <path d="M10 6v4.5M10 13.6v.2" strokeLinecap="round" />
-            </svg>
-            <span>
-              Too long to fit in one QR code. Shorten the text or use a short link{qr ? " — showing your last code that fit." : "."}
-            </span>
-          </p>
+          <HudNote role="alert" tone="bad" icon="warn" className="absolute inset-x-3 top-3 md:inset-x-auto md:left-4 md:max-w-md">
+            Too long to fit in one QR code. Shorten the text or use a short link{qr ? " — showing your last code that fit." : "."}
+          </HudNote>
         )}
       </div>
 
-      <ControlPanel
-        className="absolute inset-x-3 bottom-3 max-h-[calc(44%-1.5rem)] md:inset-x-auto md:top-4 md:right-4 md:bottom-auto md:max-h-[calc(100%-2rem)] md:w-[21rem]"
+      <Hud
+        collapsed={collapsed}
+        onCollapsed={setCollapsed}
+        className="absolute inset-x-3 bottom-3 max-h-[calc(44%-1.5rem)] md:inset-x-auto md:top-3 md:right-4 md:bottom-auto md:max-h-[calc(100%-1.5rem)] md:w-[21rem]"
         input={input}
         onInput={setInput}
         shapeId={shapeId}
@@ -249,14 +261,20 @@ export default function Home() {
         onExportGlb={() => {
           if (!qr) return;
           setGlbError(false);
-          exportGlb(blocks, qr.matrix.size, theme, "voxel-qr.glb").catch(() => setGlbError(true));
+          exportGlb(blocks, qr.matrix.size, seasonTheme(theme, season), "voxel-qr.glb").catch(() => setGlbError(true));
         }}
+        season={season}
+        onSeason={setSeason}
+        ambientMotion={ambientMotion}
+        onAmbientMotion={setBreeze}
+        motionAllowed={motionAllowed}
+        onShake={() => setShakeTick((n) => n + 1)}
+        shakeEnabled={shakeEnabled}
         sculpture={qr ? { blocks: blocks.length, modules: qr.matrix.size } : null}
-        showScanStatus={!!qr && (mode === "SCAN" || separation !== null)}
       />
 
       <p aria-live="polite" className="sr-only">
-        {qr ? `Encoding ${qr.text}. ${viewName} view.` : "No QR code yet."}
+        {qr ? `Encoding ${qr.text}. ${viewName} view. Season: ${seasonName(season)}.` : "No QR code yet."}
       </p>
     </main>
   );
