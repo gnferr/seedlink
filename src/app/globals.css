@@ -6,6 +6,21 @@
   --ring: #18181b;
   --accent: #2f6b22;
   --selection: #cfe8bf;
+  /* HUD skin: parchment. Independent of the sculpture's theme. 4px is the spacing grid. */
+  --hud-grid: 4px;
+  --hud-fill: #efe2c3;
+  --hud-ink: #2b2118;
+  --hud-hi: #fff6dc;
+  --hud-lo: #6b5236;
+  --hud-shadow: #2b2118;
+  --hud-accent: #2f6b22;
+  --hud-accent-ink: #ffffff;
+  --hud-bad-fill: #fbe3dc;
+  --hud-bad-ink: #6b1408;
+  --hud-bad-lo: #9a2a14;
+  /* Stepped, short, and instant when motion is reduced. */
+  --hud-dur: 80ms;
+  --hud-ease: steps(2, end);
 }
 
 @theme inline {
@@ -22,7 +37,24 @@
     --ring: #f4f4f5;
     --accent: #7cc66a;
     --selection: #2f5226;
+    /* HUD skin: stone. */
+    --hud-fill: #34343a;
+    --hud-ink: #ece7da;
+    --hud-hi: #5e5e68;
+    --hud-lo: #0c0c0e;
+    --hud-shadow: #000000;
+    --hud-accent: #7cc66a;
+    --hud-accent-ink: #0f1a0c;
+    --hud-bad-fill: #4a1a14;
+    --hud-bad-ink: #ffd9d0;
+    --hud-bad-lo: #ff8a72;
     color-scheme: dark;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --hud-dur: 0s;
   }
 }
 
@@ -47,4 +79,54 @@ input,
 select {
   caret-color: var(--accent);
   accent-color: var(--accent);
+}
+
+/* HUD surfaces: flat fill, two-tone bevel (light top-left, dark bottom-right), hard offset shadow, square corners. */
+.hud-panel {
+  background: var(--hud-fill);
+  color: var(--hud-ink);
+  border: 3px solid;
+  border-color: var(--hud-hi) var(--hud-lo) var(--hud-lo) var(--hud-hi);
+  box-shadow: 4px 4px 0 var(--hud-shadow);
+}
+
+.hud-bad {
+  background: var(--hud-bad-fill);
+  color: var(--hud-bad-ink);
+  border-color: var(--hud-bad-ink) var(--hud-bad-lo) var(--hud-bad-lo) var(--hud-bad-ink);
+}
+
+.hud-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 calc(var(--hud-grid) * 4);
+  font-family: var(--font-pixel), ui-monospace, monospace;
+  font-size: 16px;
+  background: var(--hud-fill);
+  color: var(--hud-ink);
+  border: 3px solid;
+  border-color: var(--hud-hi) var(--hud-lo) var(--hud-lo) var(--hud-hi);
+  box-shadow: 4px 4px 0 var(--hud-shadow);
+  cursor: pointer;
+  transition: transform var(--hud-dur) var(--hud-ease), box-shadow var(--hud-dur) var(--hud-ease);
+}
+
+/* Pressed: the shadow is spent moving the button down-right by its own offset. */
+.hud-btn:active:not([aria-disabled="true"]),
+.hud-btn[aria-pressed="true"],
+.hud-btn[aria-checked="true"] {
+  transform: translate(4px, 4px);
+  box-shadow: none;
+}
+
+.hud-btn[aria-pressed="true"],
+.hud-btn[aria-checked="true"] {
+  background: var(--hud-accent);
+  color: var(--hud-accent-ink);
+}
+
+.hud-btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  border-style: dashed;
 }

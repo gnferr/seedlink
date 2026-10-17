@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import type { ViewState } from "@/components/scene/CameraRig";
-import ScanStatus from "@/components/ScanStatus";
+import StatusPlaque from "@/components/hud/StatusPlaque";
 import { SHAPES } from "@/lib/shapes";
 import { ELEVATION_MAX_DEG, ELEVATION_MIN_DEG } from "@/lib/solver";
 import { THEMES, type ThemeId } from "@/lib/themes";
@@ -60,7 +60,6 @@ export default function ControlPanel({
   onView,
   proximity,
   separation,
-  showScanStatus,
   blocked,
   verified,
   exportError,
@@ -85,7 +84,6 @@ export default function ControlPanel({
   /** 0..1 closeness to the reveal angle; null when not meaningful (outside a settled Explore). */
   proximity: number | null;
   separation: Separation | null;
-  showScanStatus: boolean;
   /** Per export group, null when allowed, else why not and how to fix it. `scan` covers the scan PNG and the model. */
   blocked: { scan: string | null; reveal: string | null };
   /** The current inputs passed the scan check. */
@@ -192,11 +190,7 @@ export default function ControlPanel({
           </div>
         )}
 
-        {showScanStatus ? (
-          <ScanStatus separation={separation} />
-        ) : (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">Open Scan to check the code reads.</p>
-        )}
+        <StatusPlaque separation={separation} checked={view === "SCAN"} />
       </div>
 
       <div className="flex flex-col gap-2">

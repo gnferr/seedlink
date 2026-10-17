@@ -2,6 +2,7 @@
 
 import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { HudNote } from "@/components/hud/primitives";
 import ControlPanel, { type ColorKey } from "@/components/controls/ControlPanel";
 import type { ViewState } from "@/components/scene/CameraRig";
 import { generateMatrix, type QrMatrix } from "@/lib/qr";
@@ -14,7 +15,7 @@ import { failureReason, type Separation } from "@/lib/verify";
 
 const QrScene = dynamic(() => import("@/components/scene/QrScene"), {
   ssr: false,
-  loading: () => <CenterNote>Preparing the 3D view…</CenterNote>,
+  loading: () => <HudNote centered>Preparing the 3D view…</HudNote>,
 });
 
 const DEFAULT_URL = "https://example.com";
@@ -25,16 +26,6 @@ const VIEW_NAMES: Record<ViewState, string> = { EXPLORE: "explore", REVEAL: "rev
 
 type Qr = { text: string; matrix: QrMatrix };
 
-function CenterNote({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex h-full items-center justify-center p-6">
-      <p className="rounded-lg bg-white px-4 py-3 text-sm text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
-        {children}
-      </p>
-    </div>
-  );
-}
-
 // Canvas rethrows renderer-creation failures (no WebGL) into the tree; the panel stays usable.
 class SceneBoundary extends Component<{ children: React.ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -43,7 +34,7 @@ class SceneBoundary extends Component<{ children: React.ReactNode }, { failed: b
   }
   render() {
     return this.state.failed ? (
-      <CenterNote>3D view unavailable — your browser could not start WebGL.</CenterNote>
+      <HudNote centered>3D view unavailable — your browser could not start WebGL.</HudNote>
     ) : (
       this.props.children
     );
@@ -202,22 +193,13 @@ export default function Home() {
             </SceneBoundary>
           </div>
         ) : (
-          <CenterNote>Type or paste a link to build your object.</CenterNote>
+          <HudNote centered>Type or paste a link to build your object.</HudNote>
         )}
 
         {tooLong && (
-          <p
-            role="alert"
-            className="absolute inset-x-3 top-3 flex items-start gap-2 rounded-lg border border-red-700 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-[0_6px_16px_-6px_rgb(0_0_0/0.3)] md:inset-x-auto md:left-4 md:max-w-md dark:border-red-400 dark:bg-red-950 dark:text-red-200"
-          >
-            <svg aria-hidden="true" viewBox="0 0 20 20" className="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <circle cx="10" cy="10" r="7.5" />
-              <path d="M10 6v4.5M10 13.6v.2" strokeLinecap="round" />
-            </svg>
-            <span>
-              Too long to fit in one QR code. Shorten the text or use a short link{qr ? " — showing your last code that fit." : "."}
-            </span>
-          </p>
+          <HudNote role="alert" tone="bad" icon="warn" className="absolute inset-x-3 top-3 md:inset-x-auto md:left-4 md:max-w-md">
+            Too long to fit in one QR code. Shorten the text or use a short link{qr ? " — showing your last code that fit." : "."}
+          </HudNote>
         )}
       </div>
 
@@ -252,7 +234,6 @@ export default function Home() {
           exportGlb(blocks, qr.matrix.size, theme, "voxel-qr.glb").catch(() => setGlbError(true));
         }}
         sculpture={qr ? { blocks: blocks.length, modules: qr.matrix.size } : null}
-        showScanStatus={!!qr && (mode === "SCAN" || separation !== null)}
       />
 
       <p aria-live="polite" className="sr-only">
