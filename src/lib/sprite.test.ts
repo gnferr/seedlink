@@ -47,10 +47,10 @@ test("validateSprite throws", () => {
   bad({ id: "" }, "non-empty id");
 });
 
-test("every registry sprite validates and is at least 8x8", () => {
-  for (const sp of SPRITE_SPECS) validateSprite(sp);
-  for (const s of Object.values(SHAPES)) {
-    const { width, height } = s as { width?: number; height?: number };
-    if (width !== undefined) assert.ok(width >= 8 && (height ?? 0) >= 8, s.id);
+test("every registry sprite validates, is at least 8x8, and is registered", () => {
+  for (const sp of SPRITE_SPECS) {
+    validateSprite(sp);
+    assert.ok(sp.rows.length >= 8 && sp.rows[0].length >= 8, sp.id);
   }
+  assert.deepEqual(Object.keys(SHAPES), SPRITE_SPECS.map((sp) => sp.id));
 });
