@@ -263,6 +263,7 @@ export default function Hud({
               { label: "PNG (reveal)", run: onExportReveal, gate: blocked.reveal },
             ].map((b) => (
               <HudButton key={b.label} disabled={b.gate !== null} aria-describedby="export-note" onClick={b.run} className="hud-tight">
+                {b.gate !== null && <HudIcon name="lock" className="mr-1" />}
                 {b.label}
               </HudButton>
             ))}
