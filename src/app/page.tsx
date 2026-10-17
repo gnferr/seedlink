@@ -3,7 +3,7 @@
 import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { HudNote } from "@/components/hud/primitives";
-import ControlPanel, { type ColorKey } from "@/components/controls/ControlPanel";
+import Hud, { type ColorKey } from "@/components/hud/Hud";
 import type { ViewState } from "@/components/scene/CameraRig";
 import { generateMatrix, type QrMatrix } from "@/lib/qr";
 import { exportGlb, exportPng } from "@/lib/exporters";
@@ -55,6 +55,8 @@ export default function Home() {
   const [scan, setScan] = useState<{ key: string; separation: Separation } | null>(null);
   // Bumped when a lost WebGL context comes back, so the Scan check runs again.
   const [glEpoch, setGlEpoch] = useState(0);
+  // null = auto (CSS: expanded from md up, docked below); the first toggle makes it explicit.
+  const [collapsed, setCollapsed] = useState<boolean | null>(null);
   const [glbError, setGlbError] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -203,7 +205,9 @@ export default function Home() {
         )}
       </div>
 
-      <ControlPanel
+      <Hud
+        collapsed={collapsed}
+        onCollapsed={setCollapsed}
         className="absolute inset-x-3 bottom-3 max-h-[calc(44%-1.5rem)] md:inset-x-auto md:top-4 md:right-4 md:bottom-auto md:max-h-[calc(100%-2rem)] md:w-[21rem]"
         input={input}
         onInput={setInput}

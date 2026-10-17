@@ -33,31 +33,33 @@ export default function ColorField({
   const invalid = normalizeHex(draft) === null;
 
   return (
-    <div className="flex items-center gap-2">
-      <input
-        type="color"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        aria-label={`${label} colour picker`}
-        className="h-9 w-9 shrink-0 cursor-pointer rounded-md border border-zinc-500 bg-transparent p-0.5"
-      />
-      <label htmlFor={id} className="min-w-0 flex-1 text-sm text-zinc-700 dark:text-zinc-300">
+    <div className="flex min-w-0 flex-col gap-1">
+      <label htmlFor={id} className="hud-label">
         {label}
       </label>
-      <input
-        id={id}
-        value={draft}
-        spellCheck={false}
-        autoComplete="off"
-        aria-invalid={invalid}
-        onChange={(e) => {
-          setDraft(e.target.value);
-          const hex = normalizeHex(e.target.value);
-          if (hex) onChange(hex);
-        }}
-        onBlur={() => setDraft(value)}
-        className="h-9 w-24 rounded-md border border-zinc-500 bg-white px-2 font-mono text-sm tabular-nums text-zinc-900 aria-invalid:border-red-700 dark:bg-zinc-950 dark:text-zinc-50 dark:aria-invalid:border-red-400"
-      />
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label={`${label} colour picker`}
+          className="hud-swatch"
+        />
+        <input
+          id={id}
+          value={draft}
+          spellCheck={false}
+          autoComplete="off"
+          aria-invalid={invalid}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            const hex = normalizeHex(e.target.value);
+            if (hex) onChange(hex);
+          }}
+          onBlur={() => setDraft(value)}
+          className="hud-field min-w-0 font-mono text-sm tabular-nums"
+        />
+      </div>
     </div>
   );
 }

@@ -57,7 +57,7 @@ export function HudButton({ pressed, disabled, hotbar, className = "", onClick, 
       ref={ref}
       type={type}
       aria-pressed={pressed}
-      aria-disabled={disabled || undefined}
+      aria-disabled={disabled}
       onClick={disabled ? undefined : onClick}
       className={`hud-btn ${hotbar ? "min-h-12" : "min-h-11"} ${className}`}
     />
