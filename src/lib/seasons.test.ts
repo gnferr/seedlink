@@ -8,6 +8,7 @@ import {
   seasonTheme,
   shortestPhaseTarget,
   skyColour,
+  wrapPhase,
 } from "./seasons.ts";
 import { THEMES } from "./themes.ts";
 import { relativeLuminance } from "./verify.ts";
@@ -83,4 +84,22 @@ test("seasonTheme never touches the scan-relevant fields", () => {
 test("mixHex with an invalid colour returns the first argument", () => {
   assert.equal(mixHex("#4f9d3a", "nope", 0.5), "#4f9d3a");
   assert.equal(mixHex("bad", "#ffffff", 0.5), "bad");
+});
+
+test("non-finite phases wrap to 0 and never throw", () => {
+  for (const p of [NaN, Infinity, -Infinity]) {
+    assert.equal(wrapPhase(p), 0);
+    assert.equal(phaseColour(SUMMER_GREEN, "canopy", p), SUMMER_GREEN);
+    assert.equal(phaseColour(SUMMER_GREEN, "trunk", p), SUMMER_GREEN);
+    assert.equal(skyColour("#d5e6ef", p), "#d5e6ef");
+  }
+  assert.ok(Number.isFinite(shortestPhaseTarget(NaN, "WINTER")));
+});
+
+test("mixHex clamps its weight and treats non-finite as 0", () => {
+  const a = "#4f9d3a";
+  const b = "#d9822b";
+  assert.equal(mixHex(a, b, 2), mixHex(a, b, 1));
+  assert.equal(mixHex(a, b, -1), a);
+  assert.equal(mixHex(a, b, NaN), a);
 });

@@ -33,10 +33,12 @@ export function seasonIndex(s: Season): number {
 }
 
 export function wrapPhase(phase: number): number {
+  if (!Number.isFinite(phase)) return 0;
   return ((phase % 4) + 4) % 4;
 }
 
 export function shortestPhaseTarget(phase: number, season: Season): number {
+  if (!Number.isFinite(phase)) phase = 0;
   const delta = wrapPhase(seasonIndex(season) - phase);
   // A tie (delta 2) goes forward, so Summer -> Winter passes through Autumn.
   return phase + (delta <= 2 ? delta : delta - 4);
@@ -53,11 +55,12 @@ const encode = (l: number) => {
 
 export function mixHex(a: string, b: string, w: number): string {
   if (!HEX.test(a) || !HEX.test(b)) return a;
+  const t = Number.isFinite(w) ? Math.min(1, Math.max(0, w)) : 0;
   let out = "#";
   for (const i of [1, 3, 5]) {
     const la = decode(parseInt(a.slice(i, i + 2), 16));
     const lb = decode(parseInt(b.slice(i, i + 2), 16));
-    out += encode(la + (lb - la) * w).toString(16).padStart(2, "0");
+    out += encode(la + (lb - la) * t).toString(16).padStart(2, "0");
   }
   return out;
 }
