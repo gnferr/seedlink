@@ -15,11 +15,17 @@ export default function StatusPlaque({ separation, checked, hasCode = true }: { 
         : "Not checked yet — open Scan to check the code."
       : separation.separated
         ? `Scans — ${separation.matched}/${separation.total} modules, ${separation.worstCaseContrast.toFixed(1)}:1`
-        : `Won't scan — ${failureReason(separation)} · ${separation.matched}/${separation.total} modules`;
+        : (
+          <>
+            {`Won't scan — ${failureReason(separation)}`}
+            {/* Dropped visually on phones to keep the dock short; the status text still announces it. */}
+            <span className="max-md:hidden">{` · ${separation.matched}/${separation.total} modules`}</span>
+          </>
+        );
   return (
-    <p role="status" aria-live="polite" className="hud-panel mr-1 mb-1 flex items-center gap-2 px-3 py-2 text-sm font-semibold max-md:py-1.5 max-md:text-xs max-md:leading-4">
+    <p role="status" aria-live="polite" className="hud-panel mr-1 mb-1 flex items-center gap-2 px-3 py-2 text-sm font-semibold max-md:py-1.5 max-md:text-[13px] max-md:leading-4">
       <HudIcon name={icon} />
-      {label}
+      <span className="min-w-0 max-md:line-clamp-1">{label}</span>
     </p>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { ViewState } from "@/components/scene/CameraRig";
 import ColorField from "@/components/controls/ColorField";
 import { SHAPES } from "@/lib/shapes";
@@ -86,13 +86,24 @@ export default function Hud({
   const auto = collapsed === null;
   const bodyHidden = collapsed === true ? "hidden" : auto ? "max-md:hidden" : "";
   // Only the click needs the real answer for "auto"; render stays CSS-only.
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  // In auto mode CSS decides, so keep aria-expanded in step with the same breakpoint straight on the DOM node (no state).
+  useEffect(() => {
+    const el = toggleRef.current;
+    if (!auto || !el) return;
+    const mq = window.matchMedia("(min-width: 768px)");
+    const sync = () => el.setAttribute("aria-expanded", String(mq.matches));
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, [auto]);
   const toggle = () => onCollapsed(!(collapsed ?? !window.matchMedia("(min-width: 768px)").matches));
 
   return (
-    <section aria-label="Controls" className={`flex flex-col gap-2 overflow-y-auto overscroll-contain pr-1 pb-1 ${className}`}>
+    <section aria-label="Controls" className={`flex flex-col gap-2 overflow-y-auto overscroll-contain pr-1 ${className}`}>
       <div className="flex items-start gap-2">
         <Hotbar view={view} onView={onView} revealRef={revealRef} />
-        <HudButton onClick={toggle} aria-expanded={auto ? undefined : !collapsed} className="w-11 shrink-0 px-0">
+        <HudButton ref={toggleRef} onClick={toggle} aria-controls="hud-body" aria-expanded={auto ? undefined : !collapsed} className="w-11 shrink-0 px-0">
           {(auto || collapsed) && (
             <>
               <HudIcon name="expand" className={auto ? "md:hidden" : ""} />
@@ -110,7 +121,7 @@ export default function Hud({
 
       <StatusPlaque separation={separation} checked={view === "SCAN"} hasCode={sculpture !== null} />
 
-      <div className={`hud-panel flex flex-col gap-4 p-3 ${bodyHidden}`}>
+      <div className={`hud-panel flex flex-col mb-1 gap-3 p-3 ${bodyHidden}`} id="hud-body">
         <div className="flex flex-col gap-2">
           <div className="flex items-baseline justify-between gap-3">
             <label htmlFor="qr-input" className="hud-label">
