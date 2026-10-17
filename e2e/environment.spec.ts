@@ -159,14 +159,27 @@ async function orbitAway(page: Page) {
   throw new Error("the drag never moved the camera");
 }
 
+/**
+ * From Explore with Breeze on: orbit away and prove sway/particles are live, then (if `on` is false) switch Breeze off.
+ * Particles mount only after Explore settles, so without this a Scan or Reveal frame never follows a particle-live Explore.
+ */
+async function liveExplore(page: Page, on: boolean) {
+  await view(page, "EXPLORE");
+  if ((await breeze(page).getAttribute("aria-checked")) !== "true") await breeze(page).click();
+  await orbitAway(page);
+  expect(await moves(page), "ambient motion is live before leaving Explore").toBe(true);
+  if (!on) await breeze(page).click();
+}
+
 test("E1 — the Scan frame is byte-identical across all four seasons, breeze on and off", async ({ page }) => {
+  test.setTimeout(120_000); // 8 combinations, each with a live Explore first
   await ready(page);
   const frames = new Map<string, string>();
   for (const s of SEASONS)
     for (const on of [true, false]) {
       await view(page, "EXPLORE");
       await season(page, s);
-      if ((await breeze(page).getAttribute("aria-checked")) !== String(on)) await breeze(page).click();
+      await liveExplore(page, on);
       await goScan(page);
       frames.set(`${s}/${on ? "breeze" : "still"}`, await captureCanvas(page));
     }
@@ -346,8 +359,7 @@ test("E10 — the Reveal PNG is identical with breeze on and off", async ({ page
   await ready(page);
   const bytes: Buffer[] = [];
   for (const on of [true, false]) {
-    await view(page, "EXPLORE");
-    if ((await breeze(page).getAttribute("aria-checked")) !== String(on)) await breeze(page).click();
+    await liveExplore(page, on);
     await goScan(page);
     await view(page, "REVEAL");
     await settled(page, "REVEAL");
@@ -402,13 +414,15 @@ test("E12 — a weak palette blocks every export under every season", async ({ p
 });
 
 test("a 1000-character link still scans in every season with particles on", async ({ page }) => {
-  test.setTimeout(120_000); // a 161-module code is heavy to solve and render, four times over
+  test.setTimeout(150_000); // a 161-module code is heavy to solve and render, four times over
   await ready(page);
   await page.getByRole("textbox", { name: "Link or text" }).fill("https://example.com/" + "a".repeat(980));
   await expect(page.getByText("1000 characters")).toBeVisible();
   for (const s of SEASONS) {
     await view(page, "EXPLORE");
     await season(page, s);
+    // Live Explore (particles up) before Scan for two of the four seasons keeps this heavy code's runtime sane.
+    if (s === "SUMMER" || s === "WINTER") await liveExplore(page, true);
     const r = await goScan(page);
     expect(r.matched, s).toBe(r.total);
   }
