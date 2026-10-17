@@ -71,7 +71,7 @@ export function seasonColour(summer: string, region: ShapeRegion, season: Season
   return t ? mixHex(summer, t.colour, t.weight) : summer;
 }
 
-function tween(at: (s: Season) => string, phase: number): string {
+export function tweenSeasons(at: (s: Season) => string, phase: number): string {
   const p = wrapPhase(phase);
   const i = Math.floor(p);
   const f = p - i;
@@ -80,7 +80,7 @@ function tween(at: (s: Season) => string, phase: number): string {
 }
 
 export function phaseColour(summer: string, region: ShapeRegion, phase: number): string {
-  return tween((s) => seasonColour(summer, region, s), phase);
+  return tweenSeasons((s) => seasonColour(summer, region, s), phase);
 }
 
 function seasonSky(background: string, season: Season): string {
@@ -89,7 +89,7 @@ function seasonSky(background: string, season: Season): string {
 }
 
 export function skyColour(background: string, phase: number): string {
-  return tween((s) => seasonSky(background, s), phase);
+  return tweenSeasons((s) => seasonSky(background, s), phase);
 }
 
 export function seasonTheme(theme: Theme, season: Season): Theme {
