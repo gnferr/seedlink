@@ -70,9 +70,10 @@ export default function QrScene({
 
   const handlePoke = useCallback(
     (origin: { x: number; y: number; z: number }, t0: number) => {
-      const reduced = !ambientMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      // Breeze off only stops the ambient layers; a poke is a deliberate act, so it matches the Shake button.
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       triggerShake(env, reduced);
-      if (!reduced) pushBurst(bursts.current, { t0, origin: { x: origin.x, y: origin.y, z: origin.z } }, t0);
+      if (!reduced && ambientMotion) pushBurst(bursts.current, { t0, origin: { x: origin.x, y: origin.y, z: origin.z } }, t0);
     },
     [env, ambientMotion, bursts],
   );
