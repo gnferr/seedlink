@@ -25,10 +25,16 @@ export function calmFor(proximity: number): number {
   return 1 - smoothstep(0.9, 1, proximity);
 }
 
+const ZERO = () => ({ dx: 0, dz: 0 });
+// 0 * NaN is NaN, so degenerate input must short-circuit to exact zero rather than rely on the gate product.
+const live = (a: Pos) =>
+  a.stateGain !== 0 && [a.stateGain, a.x, a.y, a.z, a.time].every(Number.isFinite);
+
 type Pos = { x: number; y: number; z: number; time: number; height: number; stateGain: number };
 
 // Mirrored in the vertex shader; every term is multiplied by the gate so a zero gate is exactly zero.
 export function swayOffset(a: Pos & { calm: number }): { dx: number; dz: number } {
+  if (!live(a) || !Number.isFinite(a.calm) || !(a.height > 0) || !Number.isFinite(a.height)) return ZERO();
   const w = smoothstep(0, 1, Math.min(1, Math.max(0, a.y / a.height)));
   const ph = a.x * 0.35 + a.z * 0.5;
   const g = SWAY_CAP * a.stateGain * a.calm * w;
@@ -36,6 +42,7 @@ export function swayOffset(a: Pos & { calm: number }): { dx: number; dz: number 
 }
 
 export function shakeOffset(a: Pos & { shake: number }): { dx: number; dz: number } {
+  if (!live(a) || !Number.isFinite(a.shake)) return ZERO();
   const ph = a.x * 0.35 + a.z * 0.5;
   const g = SHAKE_CAP * a.stateGain * a.shake;
   return { dx: g * Math.sin(23 * a.time + ph), dz: g * 0.6 * Math.cos(19 * a.time + ph) };
