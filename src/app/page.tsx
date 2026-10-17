@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import ControlPanel, { type ColorKey } from "@/components/controls/ControlPanel";
 import type { ViewState } from "@/components/scene/CameraRig";
 import { generateMatrix, type QrMatrix } from "@/lib/qr";
+import { exportGlb, exportPng } from "@/lib/exporters";
 import { sampleScan } from "@/lib/sampleScan";
 import { DEFAULT_SHAPE_ID, SHAPES } from "@/lib/shapes";
 import { solve } from "@/lib/solver";
@@ -118,6 +119,16 @@ export default function Home() {
     canvasRef.current = c;
   }, []);
 
+  // Both exports carry the code, so both need a settled Scan frame whose check passed for the current inputs.
+  const exportState = useMemo<{ ok: true } | { ok: false; reason: string }>(() => {
+    if (!qr) return { ok: false, reason: "Enter a link or text first." };
+    if (separation && !separation.separated)
+      return { ok: false, reason: "This code won't scan. Change the Base colour (or pick another theme) so it contrasts with the code." };
+    if (mode !== "SCAN") return { ok: false, reason: "Open Scan so the code can be checked, then export." };
+    if (!settled || !separation) return { ok: false, reason: "Checking the code, one moment." };
+    return { ok: true };
+  }, [qr, separation, mode, settled]);
+
   const colors: Record<ColorKey, string> = {
     trunk: theme.regionColors.trunk,
     canopy: theme.regionColors.canopy,
@@ -193,6 +204,9 @@ export default function Home() {
         // Proximity is only meaningful while orbiting a settled Explore view.
         proximity={qr && mode === "EXPLORE" && settled ? proximity : null}
         separation={separation}
+        exportState={exportState}
+        onExportPng={() => canvasRef.current && exportPng(canvasRef.current, "voxel-qr.png")}
+        onExportGlb={() => qr && exportGlb(blocks, qr.matrix.size, theme, "voxel-qr.glb")}
         showScanStatus={!!qr && (mode === "SCAN" || separation !== null)}
       />
 

@@ -56,6 +56,9 @@ export default function ControlPanel({
   proximity,
   separation,
   showScanStatus,
+  exportState,
+  onExportPng,
+  onExportGlb,
   className = "",
 }: {
   input: string;
@@ -74,6 +77,10 @@ export default function ControlPanel({
   proximity: number | null;
   separation: Separation | null;
   showScanStatus: boolean;
+  /** Export is allowed only from a settled Scan whose current check passed; otherwise `reason` says why and how to fix it. */
+  exportState: { ok: true } | { ok: false; reason: string };
+  onExportPng: () => void;
+  onExportGlb: () => void;
   className?: string;
 }) {
   const snapRef = useRef<HTMLButtonElement>(null);
@@ -224,6 +231,30 @@ export default function ControlPanel({
           <ColorField key={k} label={COLOR_LABELS[k]} value={colors[k]} onChange={(hex) => onColor(k, hex)} />
         ))}
       </fieldset>
+
+      <div className="flex flex-col gap-2">
+        <span className={LABEL}>Export</span>
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { label: "PNG (scan)", run: onExportPng },
+            { label: ".glb model", run: onExportGlb },
+          ].map((b) => (
+            <button
+              key={b.label}
+              type="button"
+              aria-disabled={!exportState.ok}
+              aria-describedby="export-note"
+              onClick={() => exportState.ok && b.run()}
+              className="h-10 rounded-md bg-zinc-900 px-3 text-sm font-medium text-white transition-colors hover:bg-zinc-700 aria-disabled:cursor-not-allowed aria-disabled:border aria-disabled:border-zinc-500 aria-disabled:bg-transparent aria-disabled:text-zinc-600 aria-disabled:hover:bg-transparent dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:aria-disabled:text-zinc-400"
+            >
+              {b.label}
+            </button>
+          ))}
+        </div>
+        <p id="export-note" className="text-sm text-zinc-700 dark:text-zinc-300">
+          {exportState.ok ? "Ready: the code scans." : `Export blocked. ${exportState.reason}`}
+        </p>
+      </div>
     </section>
   );
 }

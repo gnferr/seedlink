@@ -80,3 +80,30 @@ test("an empty field shows an empty state instead of a code", async ({ page }) =
   await expect(page.getByText("Type or paste a link to build your object.")).toBeVisible();
   await expect(page.locator("canvas")).toHaveCount(0);
 });
+
+test("exports download from a verified Scan, and are blocked when the code won't scan", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("canvas")).toBeVisible({ timeout: 15_000 });
+  const png = page.getByRole("button", { name: "PNG (scan)" });
+  const glb = page.getByRole("button", { name: ".glb model" });
+
+  // Not in Scan yet: refused, with the fix in text.
+  await expect(png).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByText(/Export blocked\. Open Scan/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: /modules/ })).toContainText(/^Scans/, { timeout: 10_000 });
+  await expect(png).toHaveAttribute("aria-disabled", "false");
+
+  const [pngDl] = await Promise.all([page.waitForEvent("download"), png.click()]);
+  expect(pngDl.suggestedFilename()).toBe("voxel-qr.png");
+  const [glbDl] = await Promise.all([page.waitForEvent("download"), glb.click()]);
+  expect(glbDl.suggestedFilename()).toBe("voxel-qr.glb");
+
+  // Base colour equal to the scan colour removes all separation (Scan draws colorScan on Base).
+  await page.getByRole("textbox", { name: "Base", exact: true }).fill("#1d2618");
+  await expect(page.getByRole("status").filter({ hasText: /modules/ })).toContainText(/^Won't scan/, { timeout: 10_000 });
+  await expect(png).toHaveAttribute("aria-disabled", "true");
+  await expect(glb).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByText(/Export blocked\. This code won't scan\. Change the Base colour/)).toBeVisible();
+});
