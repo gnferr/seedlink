@@ -80,7 +80,7 @@ async function findPixel(page: Page) {
 }
 
 /** Fraction of pixels in the central square (the plane) in a flat mid-tone region: neither dark nor light, and not a one-pixel antialiased edge between the two. */
-const midToneFraction = (page: Page) =>
+const toneFractions = (page: Page) =>
   readCanvas(page, ({ w, h, data }) => {
     const side = Math.floor(Math.min(w, h) * 0.7);
     const x0 = Math.floor((w - side) / 2), y0 = Math.floor((h - side) / 2);
@@ -89,11 +89,17 @@ const midToneFraction = (page: Page) =>
       const l = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
       return l > 80 && l < 180;
     };
-    let n = 0;
+    let n = 0, dark = 0, light = 0;
     for (let y = y0 + 1; y < y0 + side - 1; y++)
       for (let x = x0 + 1; x < x0 + side - 1; x++)
+      {
         if (mid(x, y) && mid(x - 1, y) && mid(x + 1, y) && mid(x, y - 1) && mid(x, y + 1)) n++;
-    return n / (side * side);
+        const i = (y * w + x) * 4;
+        const l = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+        if (l <= 80) dark++;
+        else if (l >= 180) light++;
+      }
+    return { mid: n / (side * side), dark: dark / (side * side), light: light / (side * side) };
   }, null);
 
 // A sky pixel near the top-left corner: the background colour, which is what the season grades.
@@ -110,15 +116,15 @@ async function cornerStable(page: Page) {
 }
 
 /** Orbit damping glides for a few seconds after a drag; wait until two frames 400 ms apart match. */
-async function rest(page: Page) {
+async function rest(page: Page, tries = 30) {
   let prev = await captureCanvas(page);
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < tries; i++) {
     await page.waitForTimeout(400);
     const cur = await captureCanvas(page);
-    if (cur === prev) return;
+    if (cur === prev) return true;
     prev = cur;
   }
-  throw new Error("the orbit never came to rest");
+  return false;
 }
 
 async function orbitAway(page: Page) {
@@ -141,8 +147,8 @@ test("E1 — the Scan frame is byte-identical across all four seasons, breeze on
       await goScan(page);
       frames.set(`${s}/${on ? "breeze" : "still"}`, await captureCanvas(page));
     }
-  const [first, ...rest] = [...frames.entries()];
-  for (const [k, f] of rest) expect(f === first[1], `${k} differs from ${first[0]}`).toBe(true);
+  const [first, ...others] = [...frames.entries()];
+  for (const [k, f] of others) expect(f === first[1], `${k} differs from ${first[0]}`).toBe(true);
 });
 
 test("E2 — Reveal and Scan are still frames, even right after a shake", async ({ page }) => {
@@ -170,12 +176,16 @@ for (const s of SEASONS)
     const r = await goScan(page);
     expect(r.matched).toBe(r.total);
     expect(r.contrast).toBeGreaterThan(10);
-    expect(await midToneFraction(page)).toBeLessThan(0.02);
+    const t = await toneFractions(page);
+    expect(t.mid).toBeLessThan(0.02);
+    expect(t.dark, "dark population").toBeGreaterThan(0.05);
+    expect(t.light, "light population").toBeGreaterThan(0.05);
   });
 
 test("thrash — rapid view, season and shake changes never grade a moving frame", async ({ page }) => {
   await ready(page);
-  const bad = async () => expect(status(page)).not.toContainText("Won't scan");
+  // One snapshot per sample: a retrying assertion would let a momentary "Won't scan" pass.
+  const bad = async () => expect((await status(page).textContent()) ?? "").not.toContain("Won't scan");
   const steps = [
     () => view(page, "SCAN"),
     () => view(page, "EXPLORE"),
@@ -214,7 +224,7 @@ test("E5 — reduced motion: no particles or sway, instant season", async ({ pag
   await page.emulateMedia({ reducedMotion: "reduce" });
   await ready(page);
   await orbitAway(page);
-  await rest(page);
+  expect(await rest(page), "the orbit never came to rest").toBe(true);
   const a = await captureCanvas(page);
   await page.waitForTimeout(500);
   expect(await captureCanvas(page) === a, "Explore moves under reduced motion").toBe(true);
@@ -252,7 +262,9 @@ test("E6 — a poke shakes in Explore and does nothing in Reveal or Scan", async
   await goScan(page);
   const box = (await page.locator("canvas").boundingBox())!;
   const s = await captureCanvas(page);
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2];
+  expect(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.tagName, [cx, cy]), "click lands on the canvas").toBe("CANVAS");
+  await page.mouse.click(cx, cy);
   await page.waitForTimeout(300);
   expect(await captureCanvas(page) === s, "poke moved Scan").toBe(true);
 });
@@ -269,6 +281,19 @@ test("the app opens aligned and wakes when you orbit away", async ({ page }) => 
   const b = await captureCanvas(page);
   await page.waitForTimeout(500);
   expect(await captureCanvas(page) !== b, "orbited Explore is not alive").toBe(true);
+});
+
+// The damping glide alone makes frames differ for ~5 s, so wait it out: only sway/particles keep an orbited Explore moving.
+test("orbited Explore keeps moving with Breeze on and rests with Breeze off", async ({ page }) => {
+  test.setTimeout(120_000);
+  await ready(page);
+  await orbitAway(page);
+  await page.waitForTimeout(7000);
+  expect(await rest(page, 8), "Breeze on: expected sway/particles to keep the frame moving").toBe(false);
+
+  await breeze(page).click();
+  await expect(breeze(page)).toHaveAttribute("aria-checked", "false");
+  expect(await rest(page, 30), "Breeze off: expected the frame to come to rest").toBe(true);
 });
 
 test("E9 — no shader errors across a season cycle and all three views", async ({ page }) => {
@@ -325,8 +350,8 @@ test("E11 — the .glb carries the active season's palette", async ({ page }) =>
   const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
   const want = (hex: string) => [1, 3, 5].map((i) => lin(parseInt(hex.slice(i, i + 2), 16) / 255));
   const has = (hex: string) =>
-    json.materials.some((m: { pbrMetallicRoughness: { baseColorFactor: number[] } }) =>
-      want(hex).every((v, i) => Math.abs(m.pbrMetallicRoughness.baseColorFactor[i] - v) < 0.01),
+    json.materials.some((m: { pbrMetallicRoughness?: { baseColorFactor?: number[] } }) =>
+      want(hex).every((v, i) => Math.abs((m.pbrMetallicRoughness?.baseColorFactor ?? [1, 1, 1, 1])[i] - v) < 0.01),
     );
   const autumn = seasonColour(summerCanopy, "canopy", "AUTUMN");
   expect(autumn).not.toBe(summerCanopy);
