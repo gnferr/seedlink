@@ -8,32 +8,26 @@ import {
   PerspectiveCamera,
 } from "@react-three/drei";
 import * as THREE from "three";
-import { QUIET_ZONE, moduleHeight, type QrMatrix } from "@/lib/qr";
-import type { GeometryType, Theme } from "@/lib/themes";
+import { QUIET_ZONE, type QrMatrix } from "@/lib/qr";
+import type { Theme } from "@/lib/themes";
 
 export type ViewMode = "SCAN" | "EXPLORE";
 
 const dummy = new THREE.Object3D();
 
-function ModuleGeometry({ type }: { type: GeometryType }) {
-  switch (type) {
-    case "CYLINDER":
-      return <cylinderGeometry args={[0.5, 0.5, 1, 16]} />;
-    case "SMOOTH":
-      // Tapered column: reads as organic from the side, still a full-width footprint below.
-      return <cylinderGeometry args={[0.3, 0.5, 1, 24]} />;
-    default:
-      return <boxGeometry args={[1, 1, 1]} />;
-  }
+// TEMPORARY: a stand-in for the real anamorphic solver (src/lib/solver.ts, Task 3,
+// not yet wired in here — that's Task 6/8). This is only here so the page renders
+// again while the rebuild is mid-flight; same deterministic-hash approach v1 used.
+function placeholderHeight(x: number, z: number): number {
+  const h = Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
+  return 1 + (h - Math.floor(h)) * 6;
 }
 
 function Voxels({
   matrix,
-  heightVariance,
   theme,
 }: {
   matrix: QrMatrix;
-  heightVariance: number;
   theme: Theme;
 }) {
   const ref = useRef<THREE.InstancedMesh>(null);
@@ -54,7 +48,7 @@ function Voxels({
     if (!mesh) return;
     const offset = (matrix.size - 1) / 2;
     dark.forEach(([x, z], i) => {
-      const h = moduleHeight(x, z, 1, 1 + heightVariance);
+      const h = placeholderHeight(x, z);
       dummy.position.set(x - offset, h / 2, z - offset);
       dummy.scale.set(1, h, 1);
       dummy.updateMatrix();
@@ -63,18 +57,14 @@ function Voxels({
     mesh.count = dark.length;
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
-  }, [dark, matrix.size, heightVariance, theme.geometryType]);
+  }, [dark, matrix.size]);
 
   return (
-    // key: InstancedMesh allocates its buffer from count, and a geometry swap needs fresh instances
-    <instancedMesh
-      key={`${dark.length}-${theme.geometryType}`}
-      ref={ref}
-      args={[undefined, undefined, dark.length]}
-    >
-      <ModuleGeometry type={theme.geometryType} />
+    // key: InstancedMesh allocates its buffer from count
+    <instancedMesh key={dark.length} ref={ref} args={[undefined, undefined, dark.length]}>
+      <boxGeometry args={[1, 1, 1]} />
       <meshStandardMaterial
-        color={theme.colorDark}
+        color={theme.colorScan}
         roughness={theme.roughness}
         metalness={theme.metalness}
       />
@@ -130,22 +120,20 @@ export default function QrScene({
   matrix,
   mode,
   theme,
-  heightVariance,
 }: {
   matrix: QrMatrix;
   mode: ViewMode;
   theme: Theme;
-  heightVariance: number;
 }) {
   return (
     <Canvas dpr={[1, 2]} gl={{ preserveDrawingBuffer: true }}>
       <color attach="background" args={[theme.background]} />
       <Cameras mode={mode} size={matrix.size} />
       {/* No shadows: cast shadows would break top-down module contrast. */}
-      <ambientLight intensity={theme.ambientIntensity} />
-      <directionalLight position={[6, 12, 8]} intensity={theme.keyIntensity} />
+      <ambientLight intensity={0.4} />
+      <directionalLight position={[6, 12, 8]} intensity={1.6} />
       <Base size={matrix.size} colorLight={theme.colorLight} />
-      <Voxels matrix={matrix} heightVariance={heightVariance} theme={theme} />
+      <Voxels matrix={matrix} theme={theme} />
       {mode === "EXPLORE" && <OrbitControls makeDefault target={[0, 0, 0]} />}
     </Canvas>
   );

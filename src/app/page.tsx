@@ -35,11 +35,6 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<ViewMode>("EXPLORE");
   const [themeId, setThemeId] = useState<ThemeId>("CITYSCAPE");
-  const [heightVariance, setHeightVariance] = useState(
-    THEMES.CITYSCAPE.heightVariance,
-  );
-  // Once the user drags the slider, a theme switch must not silently discard their value.
-  const [variancePinned, setVariancePinned] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<HTMLDivElement>(null);
   const theme = THEMES[themeId];
@@ -122,11 +117,7 @@ export default function Home() {
             <span className={LABEL_CLASS}>Theme</span>
             <select
               value={themeId}
-              onChange={(e) => {
-                const next = e.target.value as ThemeId;
-                setThemeId(next);
-                if (!variancePinned) setHeightVariance(THEMES[next].heightVariance);
-              }}
+              onChange={(e) => setThemeId(e.target.value as ThemeId)}
               className={FIELD_CLASS}
             >
               {Object.entries(THEMES).map(([id, t]) => (
@@ -135,23 +126,6 @@ export default function Home() {
                 </option>
               ))}
             </select>
-          </label>
-
-          <label className="flex flex-col gap-2">
-            <span className={LABEL_CLASS}>Height {heightVariance.toFixed(1)} of 8</span>
-            <input
-              type="range"
-              min={0}
-              max={8}
-              step={0.5}
-              value={heightVariance}
-              aria-valuetext={`${heightVariance.toFixed(1)} of 8${heightVariance === 0 ? ", flat" : ""}`}
-              onChange={(e) => {
-                setHeightVariance(Number(e.target.value));
-                setVariancePinned(true);
-              }}
-              className="h-11 w-full accent-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:accent-zinc-100 dark:focus-visible:outline-zinc-100 sm:w-44"
-            />
           </label>
         </div>
 
@@ -202,12 +176,7 @@ export default function Home() {
         aria-label={`QR code encoding ${text || "nothing yet"}. ${theme.label} theme, ${viewLabel}.`}
         className="relative min-h-0 flex-1"
       >
-        <QrScene
-          matrix={matrix}
-          mode={mode}
-          theme={theme}
-          heightVariance={heightVariance}
-        />
+        <QrScene matrix={matrix} mode={mode} theme={theme} />
       </div>
 
       <p aria-live="polite" className="sr-only">

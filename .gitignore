@@ -16,3 +16,6 @@ test-results/
 
 .DS_Store
 Thumbs.db
+
+my-personal-notes.txt
+.impeccable/hook.cache.json
