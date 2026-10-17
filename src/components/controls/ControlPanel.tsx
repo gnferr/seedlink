@@ -144,7 +144,7 @@ export default function ControlPanel({
                 className="h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700"
               >
                 <div
-                  className={`h-full rounded-full transition-[width,background-color] duration-150 ${close ? "bg-green-700 dark:bg-green-400" : "bg-zinc-500"}`}
+                  className={`h-full rounded-full transition-[width,background-color] duration-150 ${close ? "bg-green-700 dark:bg-green-400" : "bg-zinc-500 dark:bg-zinc-300"}`}
                   style={{ width: `${Math.round(proximity * 100)}%` }}
                 />
               </div>

@@ -40,14 +40,34 @@ test("scan view verifies the default link scans", async ({ page }) => {
   });
 });
 
+test("leaving Scan and returning mid-tween never grades a moving frame", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("canvas")).toBeVisible({ timeout: 15_000 });
+  const scan = page.getByRole("button", { name: "Scan", exact: true });
+  const status = page.getByRole("status").filter({ hasText: /modules|Checking/ });
+
+  await scan.click();
+  await expect(status).toContainText(/^Scans/, { timeout: 10_000 });
+
+  // Round trip inside the 1.2 s tween: the camera key returns to the settled one while moving.
+  await page.getByRole("button", { name: "Explore", exact: true }).click();
+  await page.waitForTimeout(400);
+  await scan.click();
+  for (let t = 0; t < 30; t++) {
+    await expect(status).not.toContainText("Won't scan");
+    await page.waitForTimeout(100);
+  }
+  await expect(status).toContainText(/^Scans/);
+});
+
 test("too-long input keeps the last working code on screen", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("canvas")).toBeVisible({ timeout: 15_000 });
 
   await page.getByRole("textbox", { name: "Link or text" }).fill("x".repeat(3000));
 
-  // Scoped to the <p>: Next's route announcer is also role="alert".
-  await expect(page.locator('p[role="alert"]')).toContainText("Too long to fit");
+  // By role, so the test proves the banner is exposed (filtered past Next's route announcer).
+  await expect(page.getByRole("alert").filter({ hasText: "Too long to fit" })).toBeVisible();
   // The canvas must survive the error rather than being replaced by it.
   await expect(page.locator("canvas")).toBeVisible();
 });

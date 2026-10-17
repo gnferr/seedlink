@@ -93,6 +93,12 @@ export default function Home() {
     camKeyRef.current = camKey;
   }, [camKey]);
   const onSettled = useCallback(() => setSettledKey(camKeyRef.current), []);
+  // A new key voids the old settle, so a round trip back to a key mid-tween never counts as settled.
+  const [seenCamKey, setSeenCamKey] = useState(camKey);
+  if (seenCamKey !== camKey) {
+    setSeenCamKey(camKey);
+    setSettledKey(null);
+  }
   const settled = settledKey === camKey;
 
   // Verify on demand: sample only once the camera has settled in Scan, debounced on change.
@@ -120,9 +126,6 @@ export default function Home() {
   };
 
   const viewName = VIEW_NAMES[mode];
-  const label = qr
-    ? `3D QR code for "${qr.text}", shaped as a ${shape.label}, ${theme.label} theme, ${viewName} view.`
-    : "No QR code yet. Enter a link or text to build one.";
 
   return (
     <main
@@ -131,13 +134,15 @@ export default function Home() {
     >
       <h1 className="sr-only">Voxel QR</h1>
       {/* Phones: the object takes the top 56%; desktop: everything left of the floating panel. */}
-      <div
-        role="img"
-        aria-label={label}
-        className="absolute inset-x-0 top-0 bottom-[44%] min-h-0 md:right-[23rem] md:bottom-0"
-      >
+      <div className="absolute inset-x-0 top-0 bottom-[44%] min-h-0 md:right-[23rem] md:bottom-0">
+        {/* Overlays stay siblings of role="img": its children are pruned from the accessibility tree. */}
         {qr ? (
-          <QrScene
+          <div
+            role="img"
+            aria-label={`3D QR code for "${qr.text}", shaped as a ${shape.label}, ${theme.label} theme, ${viewName} view.`}
+            className="absolute inset-0"
+          >
+            <QrScene
             blocks={blocks}
             size={qr.matrix.size}
             theme={theme}
@@ -146,7 +151,8 @@ export default function Home() {
             onProximityChange={setProximity}
             onCanvasReady={onCanvasReady}
             onSettled={onSettled}
-          />
+            />
+          </div>
         ) : (
           <CenterNote>Type or paste a link to build your object.</CenterNote>
         )}

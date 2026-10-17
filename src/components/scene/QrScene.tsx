@@ -46,6 +46,7 @@ export default function QrScene({
         state={state}
         size={size}
         elevationDeg={elevationDeg}
+        blocks={blocks}
         onProximityChange={onProximityChange}
         onSettled={onSettled}
       />

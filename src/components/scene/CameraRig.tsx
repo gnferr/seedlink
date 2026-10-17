@@ -6,6 +6,7 @@ import { OrbitControls, OrthographicCamera } from "@react-three/drei";
 import gsap from "gsap";
 import * as THREE from "three";
 import { QUIET_ZONE } from "@/lib/qr";
+import type { Block } from "@/lib/solver";
 import { FIT_MARGIN } from "@/lib/scanFit";
 import { ELEVATION_MAX_DEG, ELEVATION_MIN_DEG } from "@/lib/solver";
 
@@ -68,6 +69,26 @@ function scanPose(plane: number, width: number, height: number): Pose {
   };
 }
 
+// Explore orbits revealTarget, so fit the sphere around it that holds every block and the
+// plane's corners: every orbit angle then frames the sculpture whole.
+function exploreZoom(
+  plane: number,
+  blocks: Block[],
+  size: number,
+  target: THREE.Vector3,
+  width: number,
+  height: number,
+): number {
+  const h = plane / 2;
+  const off = (size - 1) / 2;
+  const p = new THREE.Vector3();
+  let r = 0;
+  for (const x of [-h, h]) for (const z of [-h, h]) r = Math.max(r, target.distanceTo(p.set(x, 0, z)));
+  // Block centre plus its half-diagonal (1 x 1.6 x 1 box) covers every corner.
+  for (const b of blocks) r = Math.max(r, target.distanceTo(p.set(b.x - off, b.y, b.z - off)) + 1.07);
+  return (Math.min(width, height) / (2 * r)) * FIT_MARGIN;
+}
+
 /** 1 at the reveal direction, falling linearly to 0 at 30° away. */
 export function proximityFor(angleRad: number): number {
   return Math.max(0, Math.min(1, 1 - (angleRad * 180) / Math.PI / PROXIMITY_FULL_DEG));
@@ -77,12 +98,15 @@ export default function CameraRig({
   state,
   size,
   elevationDeg,
+  blocks,
   onProximityChange,
   onSettled,
 }: {
   state: ViewState;
   size: number;
   elevationDeg: number;
+  /** Frames the Explore orbit. */
+  blocks: Block[];
   onProximityChange: (p: number) => void;
   /** Fired when a state tween completes, and on instant placement. */
   onSettled?: (state: ViewState) => void;
@@ -95,6 +119,11 @@ export default function CameraRig({
   const placed = useRef(false);
   const lastProximity = useRef(-1);
   const sizeRef = useRef({ width, height });
+  // Read at tween time so an input change alone never restarts the camera.
+  const blocksRef = useRef(blocks);
+  useEffect(() => {
+    blocksRef.current = blocks;
+  }, [blocks]);
   const viewDir = useRef(new THREE.Vector3());
   const revealDir = useMemo(() => revealDirection(elevationDeg), [elevationDeg]);
   const revealTarget = useMemo(
@@ -104,7 +133,9 @@ export default function CameraRig({
 
   const fitZoom = (s: ViewState) => {
     const { width: w, height: h } = sizeRef.current;
-    return s === "SCAN" ? scanPose(plane, w, h).zoom : revealPose(plane, elevationDeg, w, h).zoom;
+    if (s === "SCAN") return scanPose(plane, w, h).zoom;
+    if (s === "EXPLORE") return exploreZoom(plane, blocksRef.current, size, revealTarget, w, h);
+    return revealPose(plane, elevationDeg, w, h).zoom;
   };
 
   useEffect(() => {
