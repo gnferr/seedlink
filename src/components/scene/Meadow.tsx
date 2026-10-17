@@ -15,6 +15,8 @@ const TOP = -0.02;
 const RIM_W = 0.6;
 const RIM_H = 0.25;
 const TEXELS = 8;
+const GROUND_LIFT = "#fffbd0";
+const GROUND_LIFT_WEIGHT = 0.22;
 const noRaycast = () => null;
 
 function box(w: number, h: number, d: number, x = 0, y = 0, z = 0) {
@@ -36,14 +38,29 @@ function seen(g: THREE.BufferGeometry, top: boolean) {
   return g;
 }
 
+// Slab layer in the slab frame (see MeadowLayout), turned to face the Reveal camera.
+function slabLayer(l: { slabFar: number; slabNear: number; slabSize: number }, h: number, y: number) {
+  const g = box(l.slabFar + l.slabNear, h, l.slabSize, (l.slabNear - l.slabFar) / 2, y, 0);
+  return g.rotateY(-Math.PI / 4); // local +x (along) -> world (1, 0, 1)/√2
+}
+
+// World-aligned UVs so the turned slab's texels still line up with the module grid (edges at half-integers).
+function worldUv(g: THREE.BufferGeometry) {
+  const pos = g.getAttribute("position");
+  const uv = g.getAttribute("uv");
+  for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) + 0.5) / TEXELS, (pos.getZ(i) + 0.5) / TEXELS);
+  uv.needsUpdate = true;
+  return g;
+}
+
 // A grey pixel pattern the grass colour multiplies: one texel per module, nearest-filtered.
-function pixelTexture(repeat: number) {
+function pixelTexture() {
   const c = document.createElement("canvas");
   c.width = c.height = TEXELS;
   const g = c.getContext("2d")!;
   for (let y = 0; y < TEXELS; y++)
     for (let x = 0; x < TEXELS; x++) {
-      const v = 226 + (((x * 7 + y * 13 + ((x * y) % 5)) * 37) % 30);
+      const v = 238 + (((x * 7 + y * 13 + ((x * y) % 5)) * 37) % 18);
       g.fillStyle = `rgb(${v},${v},${v})`;
       g.fillRect(x, y, 1, 1);
     }
@@ -51,7 +68,6 @@ function pixelTexture(repeat: number) {
   t.magFilter = t.minFilter = THREE.NearestFilter;
   t.generateMipmaps = false;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(repeat, repeat);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
@@ -75,29 +91,29 @@ function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, items: Deco[]
 
 function buildMeadow(plane: number) {
   const layout = meadowLayout(plane);
-  const S = layout.slabSize;
   const D = layout.slabDepth;
   // Lambert, not standard: the slab covers most of the frame, and flat matte faces look the same for far less shading.
   const lit = () => new THREE.MeshLambertMaterial();
-  const texture = pixelTexture(S / TEXELS);
-  const grassTop = lit();
-  grassTop.map = texture;
+  const texture = pixelTexture();
+  // Unlit and not tone-mapped: the top shows the palette hex as designed (lighting turned winter snow grey).
+  const grassTop = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
   const grassSide = lit();
   const dirt = lit();
   const deepDirt = lit();
   const sway = (height: number) => createSwayMaterial("grass", { roughness: 1, metalness: 0, height });
-  const tuftMat = sway(0.75);
-  const flowerMat = sway(0.66);
-  const bushMat = sway(1.25);
+  const tuftMat = sway(1.5);
+  const flowerMat = sway(1.45);
+  const bushMat = sway(1.6);
 
   const geos = {
-    grass: seen(box(S, 1, S, 0, TOP - 0.5, 0), true),
-    dirt: seen(box(S, 2, S, 0, TOP - 2, 0), false),
-    deep: seen(box(S, D - 3, S, 0, TOP - 3 - (D - 3) / 2, 0), false),
-    tuft: merged(box(0.12, 0.55, 0.12, -0.12, 0.275, 0.05), box(0.12, 0.75, 0.12, 0.05, 0.375, -0.08), box(0.12, 0.45, 0.12, 0.14, 0.225, 0.1)),
-    stem: box(0.08, 0.5, 0.08, 0, 0.25, 0),
-    head: box(0.26, 0.22, 0.26, 0, 0.55, 0),
-    bush: merged(box(1, 0.9, 1, 0, 0.45, 0), box(0.7, 0.4, 0.7, 0, 1.05, 0)),
+    grass: worldUv(seen(slabLayer(layout, 1, TOP - 0.5), true)),
+    dirt: seen(slabLayer(layout, 2, TOP - 2), false),
+    deep: seen(slabLayer(layout, D - 3, TOP - 3 - (D - 3) / 2), false),
+    // Decoration is sized to read at the default zoom: tufts ~1.5 high, flower heads half a module, bushes ~2-2.75 wide.
+    tuft: merged(box(0.24, 1.1, 0.24, -0.24, 0.55, 0.1), box(0.24, 1.5, 0.24, 0.1, 0.75, -0.16), box(0.24, 0.9, 0.24, 0.28, 0.45, 0.2)),
+    stem: box(0.14, 1, 0.14, 0, 0.5, 0),
+    head: box(0.7, 0.55, 0.7, 0, 1.17, 0),
+    bush: merged(box(1.25, 1.1, 1.25, 0, 0.55, 0), box(0.85, 0.5, 0.85, 0, 1.35, 0)),
   };
   const group = new THREE.Group();
   // BoxGeometry face order: +x, -x, +y, -y, +z, -z; only the top carries the pixel pattern.
@@ -130,8 +146,10 @@ function buildMeadow(plane: number) {
     rim,
     sway: [tuftMat, flowerMat, bushMat],
     tint(p: GroundPalette) {
-      grassTop.color.set(p.grass);
-      grassSide.color.set(p.grass);
+      // Lifted toward a pale yellow so the ground sits lighter and warmer than any green canopy; snow stays white.
+      const ground = mixHex(p.grass, GROUND_LIFT, GROUND_LIFT_WEIGHT);
+      grassTop.color.set(ground);
+      grassSide.color.set(ground);
       dirt.color.set(p.dirt);
       deepDirt.color.set(p.dirt).multiplyScalar(0.78);
       // Tufts and bushes read as darker growth on the grass; flowers carry the season's blossom.

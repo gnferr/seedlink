@@ -140,10 +140,11 @@ export default function CameraRig({
     [plane, elevationDeg],
   );
 
-  // The camera sits 2·plane from a look-at within plane/2 of the origin; the meadow slab (5·plane square,
-  // half-diagonal ~3.54·plane) and the tallest block bound the scene. 7·plane covers their sum with margin.
+  // The camera sits 2·plane from a look-at within plane/2 of the origin. The meadow slab's farthest corner is
+  // hypot(2.5, 2.25)·plane ≈ 3.36·plane from the origin; its 6-unit depth is covered by the tallest block term.
+  // 2 + 0.5 + 3.36 < 6, so 6·plane bounds every depth at any orbit angle.
   const depth = useMemo(
-    () => 7 * plane + blocks.reduce((m, b) => Math.max(m, b.y + HALF_BLOCK), 0),
+    () => 6 * plane + blocks.reduce((m, b) => Math.max(m, b.y + HALF_BLOCK), 0),
     [plane, blocks],
   );
 
