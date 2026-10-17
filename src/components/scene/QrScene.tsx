@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { Canvas } from "@react-three/fiber";
+import { createEnvironment } from "@/lib/motion";
 import { QUIET_ZONE } from "@/lib/qr";
 import type { Block } from "@/lib/solver";
 import type { Theme } from "@/lib/themes";
@@ -26,6 +28,7 @@ export default function QrScene({
   onCanvasReady: (canvas: HTMLCanvasElement) => void;
   onSettled?: (state: ViewState) => void;
 }) {
+  const env = useState(() => createEnvironment())[0];
   const plane = size + QUIET_ZONE * 2;
   return (
     <Canvas
@@ -41,7 +44,7 @@ export default function QrScene({
         <planeGeometry args={[plane, plane]} />
         <meshBasicMaterial color={theme.colorLight} />
       </mesh>
-      <Blocks blocks={blocks} size={size} theme={theme} flatten={state === "SCAN"} />
+      <Blocks blocks={blocks} size={size} theme={theme} flatten={state === "SCAN"} env={env} />
       <CameraRig
         state={state}
         size={size}
