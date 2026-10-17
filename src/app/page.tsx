@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ControlPanel, { type ColorKey } from "@/components/controls/ControlPanel";
 import type { ViewState } from "@/components/scene/CameraRig";
@@ -10,7 +10,7 @@ import { sampleScan } from "@/lib/sampleScan";
 import { DEFAULT_SHAPE_ID, SHAPES } from "@/lib/shapes";
 import { solve } from "@/lib/solver";
 import { THEMES, type Theme, type ThemeId } from "@/lib/themes";
-import type { Separation } from "@/lib/verify";
+import { failureReason, type Separation } from "@/lib/verify";
 
 const QrScene = dynamic(() => import("@/components/scene/QrScene"), {
   ssr: false,
@@ -35,6 +35,21 @@ function CenterNote({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Canvas rethrows renderer-creation failures (no WebGL) into the tree; the panel stays usable.
+class SceneBoundary extends Component<{ children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? (
+      <CenterNote>3D view unavailable — your browser could not start WebGL.</CenterNote>
+    ) : (
+      this.props.children
+    );
+  }
+}
+
 export default function Home() {
   const [input, setInput] = useState(DEFAULT_URL);
   const [qr, setQr] = useState<Qr | null>(() => ({ text: DEFAULT_URL, matrix: generateMatrix(DEFAULT_URL) }));
@@ -47,6 +62,9 @@ export default function Home() {
   const [proximity, setProximity] = useState(1);
   const [settledKey, setSettledKey] = useState<string | null>(null);
   const [scan, setScan] = useState<{ key: string; separation: Separation } | null>(null);
+  // Bumped when a lost WebGL context comes back, so the Scan check runs again.
+  const [glEpoch, setGlEpoch] = useState(0);
+  const [glbError, setGlbError] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Presets are starting points; a colour edit overrides only that field.
@@ -111,23 +129,40 @@ export default function Home() {
       if (canvas) setScan({ key: verifyKey, separation: sampleScan(canvas, qr.matrix) });
     }, DEBOUNCE_MS);
     return () => clearTimeout(id);
-  }, [qr, mode, settled, verifyKey]);
+  }, [qr, mode, settled, verifyKey, glEpoch]);
   // A result for different input is never shown.
   const separation = scan?.key === verifyKey ? scan.separation : null;
 
   const onCanvasReady = useCallback((c: HTMLCanvasElement) => {
     canvasRef.current = c;
+    // A lost context leaves a blank buffer: drop the result so nothing exports until it re-verifies.
+    c.addEventListener("webglcontextlost", () => setScan(null));
+    c.addEventListener("webglcontextrestored", () => setGlEpoch((n) => n + 1));
   }, []);
 
-  // Both exports carry the code, so both need a settled Scan frame whose check passed for the current inputs.
-  const exportState = useMemo<{ ok: true } | { ok: false; reason: string }>(() => {
-    if (!qr) return { ok: false, reason: "Enter a link or text first." };
-    if (separation && !separation.separated)
-      return { ok: false, reason: "This code won't scan. Change the Base colour (or pick another theme) so it contrasts with the code." };
-    if (mode !== "SCAN") return { ok: false, reason: "Open Scan so the code can be checked, then export." };
-    if (!settled || !separation) return { ok: false, reason: "Checking the code, one moment." };
-    return { ok: true };
-  }, [qr, separation, mode, settled]);
+  // Every export carries the code, so each needs a passed check for the current inputs and a settled
+  // frame: Scan for the scan PNG and the model, Reveal for the reveal PNG. null = allowed, else why not.
+  const verified = !!separation?.separated;
+  const blocked = useMemo(() => {
+    const shared = !qr
+      ? "Enter a link or text first."
+      : tooLong
+        ? "The text is too long for one QR code. Shorten it to export."
+        : separation && !separation.separated
+          ? `This code won't scan: ${failureReason(separation)}. Change the Base colour (or pick another theme) so it contrasts with the code.`
+          : null;
+    const unchecked = mode === "SCAN" ? "Checking the code, one moment." : "Open Scan so the code can be checked, then export.";
+    const scanGate =
+      mode !== "SCAN" ? (verified ? "PNG (scan) and .glb export from Scan." : unchecked) : !settled || !separation ? unchecked : null;
+    const revealGate = !verified
+      ? unchecked
+      : mode !== "REVEAL"
+        ? "PNG (reveal) exports from Reveal."
+        : !settled
+          ? "Waiting for the camera to settle."
+          : null;
+    return { scan: shared ?? scanGate, reveal: shared ?? revealGate };
+  }, [qr, tooLong, separation, verified, mode, settled]);
 
   const colors: Record<ColorKey, string> = {
     trunk: theme.regionColors.trunk,
@@ -153,16 +188,18 @@ export default function Home() {
             aria-label={`3D QR code for "${qr.text}", shaped as a ${shape.label}, ${theme.label} theme, ${viewName} view.`}
             className="absolute inset-0"
           >
-            <QrScene
-            blocks={blocks}
-            size={qr.matrix.size}
-            theme={theme}
-            state={mode}
-            elevationDeg={elevation}
-            onProximityChange={setProximity}
-            onCanvasReady={onCanvasReady}
-            onSettled={onSettled}
-            />
+            <SceneBoundary>
+              <QrScene
+                blocks={blocks}
+                size={qr.matrix.size}
+                theme={theme}
+                state={mode}
+                elevationDeg={elevation}
+                onProximityChange={setProximity}
+                onCanvasReady={onCanvasReady}
+                onSettled={onSettled}
+              />
+            </SceneBoundary>
           </div>
         ) : (
           <CenterNote>Type or paste a link to build your object.</CenterNote>
@@ -204,9 +241,17 @@ export default function Home() {
         // Proximity is only meaningful while orbiting a settled Explore view.
         proximity={qr && mode === "EXPLORE" && settled ? proximity : null}
         separation={separation}
-        exportState={exportState}
+        blocked={blocked}
+        verified={verified}
+        exportError={glbError ? "The model export failed. Try again." : null}
         onExportPng={() => canvasRef.current && exportPng(canvasRef.current, "voxel-qr.png")}
-        onExportGlb={() => qr && exportGlb(blocks, qr.matrix.size, theme, "voxel-qr.glb")}
+        onExportReveal={() => canvasRef.current && exportPng(canvasRef.current, "voxel-qr-reveal.png")}
+        onExportGlb={() => {
+          if (!qr) return;
+          setGlbError(false);
+          exportGlb(blocks, qr.matrix.size, theme, "voxel-qr.glb").catch(() => setGlbError(true));
+        }}
+        sculpture={qr ? { blocks: blocks.length, modules: qr.matrix.size } : null}
         showScanStatus={!!qr && (mode === "SCAN" || separation !== null)}
       />
 

@@ -72,6 +72,20 @@ test("too-long input keeps the last working code on screen", async ({ page }) =>
   await expect(page.locator("canvas")).toBeVisible();
 });
 
+test("too-long input blocks every export, since the screen still shows the previous code", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("canvas")).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: /modules/ })).toContainText(/^Scans/, { timeout: 10_000 });
+  await expect(page.getByRole("button", { name: "PNG (scan)" })).toHaveAttribute("aria-disabled", "false");
+
+  await page.getByRole("textbox", { name: "Link or text" }).fill("x".repeat(3000));
+  await expect(page.getByRole("alert").filter({ hasText: "Too long to fit" })).toBeVisible();
+  for (const name of ["PNG (scan)", ".glb model", "PNG (reveal)"])
+    await expect(page.getByRole("button", { name })).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByText(/Export blocked\. The text is too long/)).toBeVisible();
+});
+
 test("an empty field shows an empty state instead of a code", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("canvas")).toBeVisible({ timeout: 15_000 });
@@ -105,5 +119,46 @@ test("exports download from a verified Scan, and are blocked when the code won't
   await expect(page.getByRole("status").filter({ hasText: /modules/ })).toContainText(/^Won't scan/, { timeout: 10_000 });
   await expect(png).toHaveAttribute("aria-disabled", "true");
   await expect(glb).toHaveAttribute("aria-disabled", "true");
-  await expect(page.getByText(/Export blocked\. This code won't scan\. Change the Base colour/)).toBeVisible();
+  await expect(page.getByText(/Export blocked\. This code won't scan: contrast 1\.0:1, needs 3:1\. Change the Base colour/)).toBeVisible();
+});
+
+test("a low-contrast Base that still orders correctly is refused, naming the contrast", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("canvas")).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: /modules/ })).toContainText(/^Scans/, { timeout: 10_000 });
+
+  // Darker than the default Base but still lighter than the scan colour: ~1.5:1.
+  await page.getByRole("textbox", { name: "Base", exact: true }).fill("#3b4536");
+  const status = page.getByRole("status").filter({ hasText: /modules/ });
+  await expect(status).toContainText(/^Won't scan — contrast [\d.]+:1, needs 3:1/, { timeout: 10_000 });
+  for (const name of ["PNG (scan)", ".glb model", "PNG (reveal)"])
+    await expect(page.getByRole("button", { name })).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByText(/Export blocked\. This code won't scan: contrast [\d.]+:1, needs 3:1\. Change the Base colour/)).toBeVisible();
+});
+
+test("the reveal PNG downloads only from a settled Reveal after Scan verified", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("canvas")).toBeVisible({ timeout: 15_000 });
+  const reveal = page.getByRole("button", { name: "PNG (reveal)" });
+  await expect(reveal).toHaveAttribute("aria-disabled", "true");
+
+  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: /modules/ })).toContainText(/^Scans/, { timeout: 10_000 });
+  await expect(reveal).toHaveAttribute("aria-disabled", "true");
+
+  await page.getByRole("button", { name: "Reveal", exact: true }).click();
+  // Mid-tween (1.2 s) the frame is moving, so the export waits for the camera's settle.
+  await expect(reveal).toHaveAttribute("aria-disabled", "true");
+  await expect(reveal).toHaveAttribute("aria-disabled", "false", { timeout: 5_000 });
+  const [dl] = await Promise.all([page.waitForEvent("download"), reveal.click()]);
+  expect(dl.suggestedFilename()).toBe("voxel-qr-reveal.png");
+});
+
+test("Snap to reveal hands focus to the Reveal toggle", async ({ page }) => {
+  await page.goto("/");
+  const snap = page.getByRole("button", { name: "Snap to reveal" });
+  await snap.click({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Reveal", exact: true })).toBeFocused();
+  await expect(snap).toHaveCount(0);
 });

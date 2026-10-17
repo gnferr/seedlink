@@ -40,6 +40,11 @@ function proximityText(p: number): string {
   return "Orbit to find the tree";
 }
 
+function exportNote({ scan, reveal }: { scan: string | null; reveal: string | null }, verified: boolean): string {
+  if (scan !== null && scan === reveal) return `Export blocked. ${scan}`;
+  return [verified ? "Ready: the code scans." : "Export blocked.", scan, reveal].filter(Boolean).join(" ");
+}
+
 export default function ControlPanel({
   input,
   onInput,
@@ -56,9 +61,13 @@ export default function ControlPanel({
   proximity,
   separation,
   showScanStatus,
-  exportState,
+  blocked,
+  verified,
+  exportError,
   onExportPng,
   onExportGlb,
+  onExportReveal,
+  sculpture,
   className = "",
 }: {
   input: string;
@@ -77,13 +86,20 @@ export default function ControlPanel({
   proximity: number | null;
   separation: Separation | null;
   showScanStatus: boolean;
-  /** Export is allowed only from a settled Scan whose current check passed; otherwise `reason` says why and how to fix it. */
-  exportState: { ok: true } | { ok: false; reason: string };
+  /** Per export group, null when allowed, else why not and how to fix it. `scan` covers the scan PNG and the model. */
+  blocked: { scan: string | null; reveal: string | null };
+  /** The current inputs passed the scan check. */
+  verified: boolean;
+  exportError: string | null;
   onExportPng: () => void;
   onExportGlb: () => void;
+  onExportReveal: () => void;
+  /** Size of the current sculpture; null with no code. */
+  sculpture: { blocks: number; modules: number } | null;
   className?: string;
 }) {
   const snapRef = useRef<HTMLButtonElement>(null);
+  const revealRef = useRef<HTMLButtonElement>(null);
   const close = proximity !== null && proximity >= CLOSE;
 
   // The one authored moment: the snap button answers when the user finds the angle.
@@ -128,6 +144,7 @@ export default function ControlPanel({
           {VIEWS.map((v) => (
             <button
               key={v.id}
+              ref={v.id === "REVEAL" ? revealRef : undefined}
               type="button"
               aria-pressed={view === v.id}
               onClick={() => onView(v.id)}
@@ -159,7 +176,11 @@ export default function ControlPanel({
             <button
               ref={snapRef}
               type="button"
-              onClick={() => onView("REVEAL")}
+              onClick={() => {
+                onView("REVEAL");
+                // This button unmounts once Reveal starts; keep focus on the control that now holds the state.
+                revealRef.current?.focus();
+              }}
               className={`h-9 shrink-0 rounded-md px-3 text-sm font-medium transition-colors ${
                 close
                   ? "bg-green-800 text-white hover:bg-green-900 dark:bg-green-400 dark:text-zinc-950 dark:hover:bg-green-300"
@@ -234,27 +255,35 @@ export default function ControlPanel({
 
       <div className="flex flex-col gap-2">
         <span className={LABEL}>Export</span>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {[
-            { label: "PNG (scan)", run: onExportPng },
-            { label: ".glb model", run: onExportGlb },
+            { label: "PNG (scan)", run: onExportPng, gate: blocked.scan },
+            { label: ".glb model", run: onExportGlb, gate: blocked.scan },
+            { label: "PNG (reveal)", run: onExportReveal, gate: blocked.reveal },
           ].map((b) => (
             <button
               key={b.label}
               type="button"
-              aria-disabled={!exportState.ok}
+              aria-disabled={b.gate !== null}
               aria-describedby="export-note"
-              onClick={() => exportState.ok && b.run()}
-              className="h-10 rounded-md bg-zinc-900 px-3 text-sm font-medium text-white transition-colors hover:bg-zinc-700 aria-disabled:cursor-not-allowed aria-disabled:border aria-disabled:border-zinc-500 aria-disabled:bg-transparent aria-disabled:text-zinc-600 aria-disabled:hover:bg-transparent dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:aria-disabled:text-zinc-400"
+              onClick={() => b.gate === null && b.run()}
+              className="h-10 rounded-md bg-zinc-900 px-1 text-sm whitespace-nowrap font-medium text-white transition-colors hover:bg-zinc-700 aria-disabled:cursor-not-allowed aria-disabled:border aria-disabled:border-zinc-500 aria-disabled:bg-transparent aria-disabled:text-zinc-600 aria-disabled:hover:bg-transparent dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:aria-disabled:text-zinc-400"
             >
               {b.label}
             </button>
           ))}
         </div>
         <p id="export-note" className="text-sm text-zinc-700 dark:text-zinc-300">
-          {exportState.ok ? "Ready: the code scans." : `Export blocked. ${exportState.reason}`}
+          {exportError ?? exportNote(blocked, verified)}
         </p>
       </div>
+
+      {sculpture && (
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          {sculpture.blocks} blocks · {sculpture.modules}×{sculpture.modules} modules. Longer links give a finer
+          sculpture. The tree only lines up in this on-screen view; a photo of a printed copy won&rsquo;t.
+        </p>
+      )}
     </section>
   );
 }
