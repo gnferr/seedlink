@@ -10,7 +10,7 @@
   --hud-grid: 4px;
   --hud-fill: #efe2c3;
   --hud-ink: #2b2118;
-  --hud-hi: #fff6dc;
+  --hud-hi: #8f7350;
   --hud-lo: #6b5236;
   --hud-shadow: #2b2118;
   --hud-accent: #2f6b22;
@@ -40,8 +40,8 @@
     /* HUD skin: stone. */
     --hud-fill: #34343a;
     --hud-ink: #ece7da;
-    --hud-hi: #5e5e68;
-    --hud-lo: #0c0c0e;
+    --hud-hi: #c4c4d0;
+    --hud-lo: #8a8a96;
     --hud-shadow: #000000;
     --hud-accent: #7cc66a;
     --hud-accent-ink: #0f1a0c;

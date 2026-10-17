@@ -190,7 +190,7 @@ export default function ControlPanel({
           </div>
         )}
 
-        <StatusPlaque separation={separation} checked={view === "SCAN"} />
+        <StatusPlaque separation={separation} checked={view === "SCAN"} hasCode={sculpture !== null} />
       </div>
 
       <div className="flex flex-col gap-2">
