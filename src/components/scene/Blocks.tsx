@@ -120,6 +120,7 @@ export default function Blocks({
   const poke = pokeEnabled && onPoke
     ? (e: ThreeEvent<MouseEvent>) => {
         if (e.delta > 3) return; // an orbit drag, not a click
+        e.stopPropagation(); // one burst per click, not one per intersected instance
         onPoke(e.point, clock.elapsedTime);
       }
     : undefined;

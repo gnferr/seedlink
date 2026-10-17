@@ -70,8 +70,9 @@ export default function QrScene({
 
   const handlePoke = useCallback(
     (origin: { x: number; y: number; z: number }, t0: number) => {
-      triggerShake(env, !ambientMotion);
-      if (ambientMotion) pushBurst(bursts.current, { t0, origin: { x: origin.x, y: origin.y, z: origin.z } }, t0);
+      const reduced = !ambientMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      triggerShake(env, reduced);
+      if (!reduced) pushBurst(bursts.current, { t0, origin: { x: origin.x, y: origin.y, z: origin.z } }, t0);
     },
     [env, ambientMotion, bursts],
   );
