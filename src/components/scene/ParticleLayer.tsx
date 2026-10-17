@@ -12,6 +12,7 @@ import {
   PARTICLE_SETS,
   burstPose,
   particlePose,
+  particleSize,
   type Bounds,
 } from "@/lib/particles";
 
@@ -28,6 +29,7 @@ export default function ParticleLayer({
   env,
   season,
   bounds,
+  plane,
   budget,
   active,
   leaving,
@@ -37,6 +39,7 @@ export default function ParticleLayer({
   env: Environment;
   season: Season;
   bounds: Bounds;
+  plane: number;
   budget: number;
   active: boolean;
   leaving: boolean;
@@ -49,6 +52,8 @@ export default function ParticleLayer({
   const life = useRef(0);
   const drained = useRef(false);
   const zeroed = useRef(false);
+  // Scratch poses reused every frame so the loop allocates nothing.
+  const pose = useRef({ x: 0, y: 0, z: 0, rot: 0, scale: 0 });
 
   useFrame(({ clock }, delta) => {
     if (drained.current) return;
@@ -57,6 +62,7 @@ export default function ParticleLayer({
     life.current = leaving ? Math.max(0, life.current - step) : Math.min(1, life.current + step);
     if ((leaving && life.current === 0) || (!active && gate.stateGain === 0)) {
       drained.current = true;
+      for (let i = 0; i < items.current.length; i++) items.current[i].scale.setScalar(0);
       onDrained();
       return;
     }
@@ -71,7 +77,7 @@ export default function ParticleLayer({
     zeroed.current = false;
     const t = clock.elapsedTime;
     for (let i = 0; i < ambient; i++) {
-      const p = particlePose(i, t, set, bounds);
+      const p = particlePose(i, t, set, bounds, pose.current);
       const o = objs[i];
       o.position.set(p.x, p.y, p.z);
       o.rotation.set(p.rot, p.rot * 0.7, 0);
@@ -84,7 +90,7 @@ export default function ParticleLayer({
       const age = t - list[b].t0;
       if (age < 0 || age >= BURST_LIFE_SECONDS) continue;
       for (let j = 0; j < BURST_MAX && slot < budget; j++, slot++) {
-        const p = burstPose(j, age, list[b].origin, set);
+        const p = burstPose(j, age, list[b].origin, set, pose.current);
         const o = objs[slot];
         o.position.set(p.x, p.y, p.z);
         o.scale.setScalar(p.scale * k);
@@ -93,7 +99,7 @@ export default function ParticleLayer({
     for (; slot < budget; slot++) objs[slot].scale.setScalar(0);
   });
 
-  const s = set.size;
+  const s = particleSize(plane, set);
   return (
     <Instances limit={budget} range={budget} frustumCulled={false} raycast={noRaycast}>
       <boxGeometry args={[s, set.kind === "LEAF" ? s * 0.35 : s, s]} />

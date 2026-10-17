@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { Canvas } from "@react-three/fiber";
 import { blockBox } from "@/lib/blockGeometry";
 import { createEnvironment } from "@/lib/motion";
-import { PARTICLE_SETS, particleBounds, particleBudget } from "@/lib/particles";
+import { PARTICLE_SETS, particleBounds, particleBudget, particleSize } from "@/lib/particles";
 import { nextLayers } from "@/lib/particleLayers";
 import { QUIET_ZONE } from "@/lib/qr";
 import type { Block } from "@/lib/solver";
@@ -14,8 +14,6 @@ import Blocks from "./Blocks";
 import CameraRig, { type ViewState } from "./CameraRig";
 import EnvironmentDriver from "./EnvironmentDriver";
 import ParticleLayer, { type Burst } from "./ParticleLayer";
-
-const PARTICLE_SIZE = Math.max(...Object.values(PARTICLE_SETS).map((s) => s.size));
 
 export default function QrScene({
   blocks,
@@ -55,8 +53,16 @@ export default function QrScene({
   );
   const bounds = useMemo(() => {
     const off = (size - 1) / 2;
-    return particleBounds(blocks.map((b) => blockBox(b, off)), PARTICLE_SIZE);
-  }, [blocks, size]);
+    const biggest = Math.max(...Object.values(PARTICLE_SETS).map((s) => particleSize(plane, s)));
+    // blockBox's y is the pillar centre for grounded blocks; the block's own y reaches the top.
+    return particleBounds(
+      blocks.map((b) => {
+        const box = blockBox(b, off);
+        return { x: box.x, y: b.y, z: box.z };
+      }),
+      biggest,
+    );
+  }, [blocks, size, plane]);
   const [bursts] = useState<{ current: Burst[] }>(() => ({ current: [] }));
 
   // A new object per rig settle, so a repeat settle in the same state is still seen.
@@ -126,6 +132,7 @@ export default function QrScene({
           env={env}
           season={l.season}
           bounds={bounds}
+          plane={plane}
           budget={budget}
           active={state === "EXPLORE"}
           leaving={l.leaving}

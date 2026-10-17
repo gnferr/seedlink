@@ -8,12 +8,14 @@ import {
   particleBounds,
   particleBudget,
   particlePose,
+  particleSize,
   type Bounds,
 } from "./particles.ts";
 import { generateMatrix } from "./qr.ts";
 import { SHAPES, DEFAULT_SHAPE_ID } from "./shapes.ts";
 import { solve } from "./solver.ts";
-import type { Season } from "./seasons.ts";
+import { SEASONS, skyColour, type Season } from "./seasons.ts";
+import { contrastRatio, relativeLuminance } from "./verify.ts";
 
 const seasons: Season[] = ["SPRING", "SUMMER", "AUTUMN", "WINTER"];
 const bounds: Bounds = { minX: -10, maxX: 10, minY: 0, maxY: 12, minZ: -8, maxZ: 9 };
@@ -108,3 +110,36 @@ test("a burst particle's scale reaches exactly 0 at BURST_LIFE_SECONDS", () => {
     }
   }
 });
+
+test("particlePose and burstPose write into a given out object and return it", () => {
+  for (const s of seasons) {
+    const set = PARTICLE_SETS[s];
+    const out = { x: 0, y: 0, z: 0, rot: 0, scale: 0 };
+    assert.equal(particlePose(5, 3.3, set, bounds, out), out);
+    assert.deepEqual(out, particlePose(5, 3.3, set, bounds));
+    const bo = { x: 0, y: 0, z: 0, scale: 0 };
+    const o = { x: 1, y: 2, z: 3 };
+    assert.equal(burstPose(2, 0.4, o, set, bo), bo);
+    assert.deepEqual(bo, burstPose(2, 0.4, o, set));
+  }
+});
+
+test("particleSize scales with the plane, floors at 0.3 and follows the season factor", () => {
+  for (const s of seasons) {
+    const set = PARTICLE_SETS[s];
+    assert.equal(particleSize(10, set), 0.3 * set.sizeFactor);
+    assert.equal(particleSize(165, set), (165 / 80) * set.sizeFactor);
+  }
+  assert.ok(particleSize(165, PARTICLE_SETS.WINTER) > particleSize(33, PARTICLE_SETS.WINTER));
+});
+
+const hexLum = (h: string) =>
+  relativeLuminance(parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16));
+
+for (const s of SEASONS) {
+  test(`${s} has a particle colour with contrast >= 1.4 against its sky`, () => {
+    const sky = hexLum(skyColour("#d5e6ef", SEASONS.indexOf(s)));
+    const best = Math.max(...PARTICLE_SETS[s].colors.map((c) => contrastRatio(hexLum(c), sky)));
+    assert.ok(best >= 1.4, `${s} best contrast ${best.toFixed(2)}`);
+  });
+}

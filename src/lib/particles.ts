@@ -4,7 +4,7 @@ export type ParticleKind = "PETAL" | "FIREFLY" | "LEAF" | "SNOW";
 export type ParticleSet = {
   kind: ParticleKind;
   colors: string[];
-  size: number;
+  sizeFactor: number;
   fallSpeed: number;
   drift: number;
   loopSeconds: number;
@@ -12,11 +12,16 @@ export type ParticleSet = {
 };
 
 export const PARTICLE_SETS: Record<Season, ParticleSet> = {
-  SPRING: { kind: "PETAL", colors: ["#f9a8d4", "#fbcfe8", "#ffffff"], size: 0.18, fallSpeed: 0.6, drift: 0.4, loopSeconds: 6, pulseHz: 0 },
-  SUMMER: { kind: "FIREFLY", colors: ["#fde047", "#facc15", "#fef08a"], size: 0.18, fallSpeed: 0, drift: 0.45, loopSeconds: 9, pulseHz: 0.5 },
-  AUTUMN: { kind: "LEAF", colors: ["#ea580c", "#dc2626", "#eab308"], size: 0.18, fallSpeed: 0.8, drift: 0.45, loopSeconds: 5, pulseHz: 0 },
-  WINTER: { kind: "SNOW", colors: ["#ffffff", "#e0f2fe"], size: 0.18, fallSpeed: 0.5, drift: 0.25, loopSeconds: 8, pulseHz: 0 },
+  SPRING: { kind: "PETAL", colors: ["#ec4899", "#f9a8d4", "#ffffff"], sizeFactor: 1, fallSpeed: 0.6, drift: 0.4, loopSeconds: 6, pulseHz: 0 },
+  SUMMER: { kind: "FIREFLY", colors: ["#d97706", "#f59e0b", "#fbbf24"], sizeFactor: 1.4, fallSpeed: 0, drift: 0.45, loopSeconds: 9, pulseHz: 0.5 },
+  AUTUMN: { kind: "LEAF", colors: ["#ea580c", "#dc2626", "#eab308"], sizeFactor: 1, fallSpeed: 0.8, drift: 0.45, loopSeconds: 5, pulseHz: 0 },
+  WINTER: { kind: "SNOW", colors: ["#ffffff", "#6f93b3"], sizeFactor: 1.3, fallSpeed: 0.5, drift: 0.25, loopSeconds: 8, pulseHz: 0 },
 };
+
+/** World units per particle: about 6-8 px on screen at the default zoom for every code size. */
+export function particleSize(plane: number, set: ParticleSet): number {
+  return Math.max(0.3, plane / 80) * set.sizeFactor;
+}
 
 export type Bounds = { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
 
@@ -52,12 +57,15 @@ const span = (lo: number, hi: number, inset: number, u: number) => {
   return a >= c ? (lo + hi) / 2 : a + u * (c - a);
 };
 
+export type Pose = { x: number; y: number; z: number; rot: number; scale: number };
+
 export function particlePose(
   i: number,
   t: number,
   set: ParticleSet,
   b: Bounds,
-): { x: number; y: number; z: number; rot: number; scale: number } {
+  out: Pose = { x: 0, y: 0, z: 0, rot: 0, scale: 0 },
+): Pose {
   const d = set.drift;
   const x0 = span(b.minX, b.maxX, d, hash(i, 0));
   const z0 = span(b.minZ, b.maxZ, d, hash(i, 1));
@@ -66,26 +74,24 @@ export function particlePose(
 
   if (set.kind === "FIREFLY") {
     const y0 = span(b.minY, b.maxY, d, hash(i, 3));
-    return {
-      x: x0 + d * Math.sin(w * t + ph),
-      y: y0 + d * Math.sin(1.7 * w * t + 2 * ph),
-      z: z0 + d * Math.sin(1.3 * w * t + 3 * ph),
-      rot: 0,
-      scale: 0.5 + 0.5 * Math.sin(TAU * set.pulseHz * t + ph),
-    };
+    out.x = x0 + d * Math.sin(w * t + ph);
+    out.y = y0 + d * Math.sin(1.7 * w * t + 2 * ph);
+    out.z = z0 + d * Math.sin(1.3 * w * t + 3 * ph);
+    out.rot = 0;
+    out.scale = 0.5 + 0.5 * Math.sin(TAU * set.pulseHz * t + ph);
+    return out;
   }
 
   const h = Math.max(b.maxY - b.minY, 1e-6);
   const f = (((hash(i, 3) * h + t * set.fallSpeed) % h) + h) % h / h; // 0 top .. 1 bottom
   // Fade at the wrap so particles never pop in or out.
   const scale = Math.min(1, f * 8, (1 - f) * 8);
-  return {
-    x: x0 + d * Math.sin(w * t + ph),
-    y: b.maxY - f * h,
-    z: z0 + d * Math.cos(w * t + ph),
-    rot: ph + t * (0.5 + hash(i, 4)),
-    scale,
-  };
+  out.x = x0 + d * Math.sin(w * t + ph);
+  out.y = b.maxY - f * h;
+  out.z = z0 + d * Math.cos(w * t + ph);
+  out.rot = ph + t * (0.5 + hash(i, 4));
+  out.scale = scale;
+  return out;
 }
 
 export const BURST_MIN = 8, BURST_MAX = 16, BURST_LIFE_SECONDS = 1.2;
@@ -95,14 +101,14 @@ export function burstPose(
   age: number,
   origin: { x: number; y: number; z: number },
   set: ParticleSet,
+  out: { x: number; y: number; z: number; scale: number } = { x: 0, y: 0, z: 0, scale: 0 },
 ): { x: number; y: number; z: number; scale: number } {
   const a = hash(k, 10) * TAU;
   const up = 1 + hash(k, 11);
-  const out = 0.8 + hash(k, 12) * (set.drift + 0.8);
-  return {
-    x: origin.x + Math.cos(a) * out * age,
-    y: origin.y + up * 2 * age - 3 * age * age,
-    z: origin.z + Math.sin(a) * out * age,
-    scale: Math.min(1, Math.max(0, 1 - age / BURST_LIFE_SECONDS)),
-  };
+  const reach = 0.8 + hash(k, 12) * (set.drift + 0.8);
+  out.x = origin.x + Math.cos(a) * reach * age;
+  out.y = origin.y + up * 2 * age - 3 * age * age;
+  out.z = origin.z + Math.sin(a) * reach * age;
+  out.scale = Math.min(1, Math.max(0, 1 - age / BURST_LIFE_SECONDS));
+  return out;
 }
