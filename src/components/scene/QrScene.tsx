@@ -37,7 +37,7 @@ export default function QrScene({
   shakeTick?: number;
 }) {
   const env = useState(() => {
-    const e = createEnvironment();
+    const e = createEnvironment(season);
     // The app opens at the reveal pose (proximity 1), so the first frame must already be calm.
     e.gate.calm = 0;
     return e;

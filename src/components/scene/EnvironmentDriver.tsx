@@ -54,7 +54,7 @@ export default function EnvironmentDriver({
     a.scan = scan;
     a.background = background;
     // The Scan frame is season-immune, background included.
-    (scene.background as THREE.Color).set(scan ? background : skyColour(background, phase));
+    if (scene.background) (scene.background as THREE.Color).set(scan ? background : skyColour(background, phase));
   });
 
   return null;
