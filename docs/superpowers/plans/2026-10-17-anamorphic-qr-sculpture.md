@@ -228,11 +228,23 @@ test("cells in a column are ordered by ground depth", () => {
   }
 });
 
-test("surplus cells in a crowded column do not collapse onto one height", () => {
-  const blocks = solve(generateMatrix("x".repeat(400)), tree, 30);
+// Amended (Ruling C11): the original asserted distinct `y`, which cannot fail —
+// `w` is unique per cell within a column, so `y` is strictly increasing no matter
+// what the slot logic does. Assert in screen-`v` space instead, where the
+// sub-sample offset is the only thing that separates cells sharing a slot.
+test("surplus cells sharing a slot are separated by the sub-sample offset", () => {
+  const m2 = generateMatrix("x".repeat(400));
+  const blocks = solve(m2, tree, 30);
   const col = groupByScreenColumn(blocks);
-  const crowded = [...col.values()].sort((p, q) => q.length - p.length)[0];
-  assert.ok(new Set(crowded.map((b) => b.y.toFixed(4))).size > 1);
+  const crowded = [...col.values()]
+    .filter((ms) => ms.some((b) => b.region !== null))
+    .sort((p, q) => q.length - p.length)[0];
+  // v = y*cos - w*sin recovers the screen height the solver aimed each block at.
+  const rad = (30 * Math.PI) / 180;
+  const vs = crowded.map((b) =>
+    (b.y * Math.cos(rad) - groundW(b.x, b.z, m2.size) * Math.sin(rad)).toFixed(4),
+  );
+  assert.equal(new Set(vs).size, vs.length, "two blocks were aimed at the same screen height");
 });
 
 test("cells outside the shape still get placed, low and quiet", () => {
