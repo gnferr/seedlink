@@ -17,6 +17,7 @@ import { solve } from "@/lib/solver";
 import { THEMES, type Theme, type ThemeId } from "@/lib/themes";
 import { failureReason, type Separation } from "@/lib/verify";
 import { saveState } from "@/lib/save";
+import { NO_INSETS, type ScanInsets } from "@/lib/scanFit";
 
 const QrScene = dynamic(() => import("@/components/scene/QrScene"), {
   ssr: false,
@@ -106,8 +107,22 @@ export default function Home() {
     return () => clearTimeout(id);
   }, [input]);
 
+  // The resting controls cover the top and bottom of the full-bleed world; Scan fits the pad between them.
+  // While in Scan the insets only grow (a reason line that disappears once the code verifies must not re-frame
+  // and re-check the code); outside Scan they follow the measurement. Never season- or motion-dependent.
+  const [chrome, setChrome] = useState<ScanInsets>(NO_INSETS);
+  const onChromeInsets = useCallback(
+    (i: ScanInsets) => setChrome((c) => (c.top === i.top && c.bottom === i.bottom ? c : i)),
+    [],
+  );
+  const [scanInsets, setScanInsets] = useState<ScanInsets>(NO_INSETS);
+  const nextInsets =
+    mode === "SCAN" ? { top: Math.max(scanInsets.top, chrome.top), bottom: Math.max(scanInsets.bottom, chrome.bottom) } : chrome;
+  if (nextInsets.top !== scanInsets.top || nextInsets.bottom !== scanInsets.bottom) setScanInsets(nextInsets);
+
   // The camera re-tweens whenever any of these change, so a settle only counts for the key it settled under.
-  const camKey = `${mode}|${matrix?.size}|${elevation}`;
+  // Insets only move the Scan camera, so they are part of the key in Scan only.
+  const camKey = `${mode}|${matrix?.size}|${elevation}|${mode === "SCAN" ? `${scanInsets.top}|${scanInsets.bottom}` : ""}`;
   const camKeyRef = useRef(camKey);
   useLayoutEffect(() => {
     camKeyRef.current = camKey;
@@ -130,10 +145,10 @@ export default function Home() {
     if (!qr || mode !== "SCAN" || !settled) return;
     const id = setTimeout(() => {
       const canvas = canvasRef.current;
-      if (canvas) setScan({ key: verifyKey, separation: sampleScan(canvas, qr.matrix) });
+      if (canvas) setScan({ key: verifyKey, separation: sampleScan(canvas, qr.matrix, scanInsets) });
     }, DEBOUNCE_MS);
     return () => clearTimeout(id);
-  }, [qr, mode, settled, verifyKey, glEpoch]);
+  }, [qr, mode, settled, verifyKey, glEpoch, scanInsets]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const v = e.repeat ? null : viewForKey({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, target: e.target as HTMLElement | null });
@@ -219,6 +234,7 @@ export default function Home() {
                 ambientMotion={ambientMotion}
                 shakeTick={shakeTick}
                 pokeEnabled={shakeEnabled}
+                scanInsets={scanInsets}
               />
             </SceneBoundary>
           </div>
@@ -236,6 +252,7 @@ export default function Home() {
 
       <Hud
         className="absolute inset-0"
+        onChromeInsets={onChromeInsets}
         input={input}
         onInput={setInput}
         modelId={shapeId}

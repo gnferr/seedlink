@@ -8,7 +8,7 @@ import * as THREE from "three";
 import { HALF_BLOCK } from "@/lib/blockGeometry";
 import { QUIET_ZONE } from "@/lib/qr";
 import type { Block } from "@/lib/solver";
-import { FIT_MARGIN } from "@/lib/scanFit";
+import { FIT_MARGIN, scanFit, type ScanInsets } from "@/lib/scanFit";
 import { ELEVATION_MAX_DEG, ELEVATION_MIN_DEG } from "@/lib/solver";
 import { RAMP_DOWN_SECONDS, RAMP_UP_SECONDS, calmFor, type Environment } from "@/lib/motion";
 import { killStateGainTween, rampStateGain, restGate, setCalm, stillGate } from "@/lib/motionTweens";
@@ -63,12 +63,16 @@ function revealPose(
   };
 }
 
-function scanPose(plane: number, width: number, height: number): Pose {
+// Straight down, framed to the free band between the controls (the same fit the sampler uses). Screen-down is
+// +z, so looking dy/zoom units toward -z puts the pad centre dy px below the view centre.
+function scanPose(plane: number, width: number, height: number, insets: ScanInsets): Pose {
+  const { zoom, dy } = scanFit(width, height, plane, insets);
+  const shift = -dy / zoom;
   return {
-    position: new THREE.Vector3(0, plane * 2, 0),
-    target: new THREE.Vector3(),
+    position: new THREE.Vector3(0, plane * 2, shift),
+    target: new THREE.Vector3(0, 0, shift),
     up: new THREE.Vector3(0, 0, -1),
-    zoom: (Math.min(width, height) / plane) * FIT_MARGIN,
+    zoom,
   };
 }
 
@@ -106,10 +110,13 @@ export default function CameraRig({
   onSettled,
   env,
   ambientMotion,
+  scanInsets,
 }: {
   state: ViewState;
   size: number;
   elevationDeg: number;
+  /** CSS px covered by controls at the top and bottom; only the Scan framing uses them. */
+  scanInsets: ScanInsets;
   /** Frames the Explore orbit. */
   blocks: Block[];
   onProximityChange: (p: number) => void;
@@ -133,6 +140,8 @@ export default function CameraRig({
   }, [blocks]);
   // Tween end zoom, computed once per tween (Explore's fit walks every block); a resize rescales it.
   const toZoom = useRef(0);
+  const toPose = useRef<Pose | null>(null);
+  const scanInsetKey = state === "SCAN" ? `${scanInsets.top}|${scanInsets.bottom}` : "";
   const viewDir = useRef(new THREE.Vector3());
   const revealDir = useMemo(() => revealDirection(elevationDeg), [elevationDeg]);
   const revealTarget = useMemo(
@@ -150,7 +159,7 @@ export default function CameraRig({
 
   const fitZoom = (s: ViewState) => {
     const { width: w, height: h } = sizeRef.current;
-    if (s === "SCAN") return scanPose(plane, w, h).zoom;
+    if (s === "SCAN") return scanPose(plane, w, h, scanInsets).zoom;
     if (s === "EXPLORE") return exploreZoom(plane, blocksRef.current, size, revealTarget, w, h);
     return revealPose(plane, elevationDeg, w, h).zoom;
   };
@@ -158,7 +167,8 @@ export default function CameraRig({
   useEffect(() => {
     const cam = camRef.current;
     if (!cam) return;
-    const to = state === "SCAN" ? scanPose(plane, sizeRef.current.width, sizeRef.current.height) : revealPose(plane, elevationDeg, sizeRef.current.width, sizeRef.current.height);
+    const to = state === "SCAN" ? scanPose(plane, sizeRef.current.width, sizeRef.current.height, scanInsets) : revealPose(plane, elevationDeg, sizeRef.current.width, sizeRef.current.height);
+    toPose.current = to;
     const apply = (pos: THREE.Vector3, tgt: THREE.Vector3, up: THREE.Vector3, zoom: number) => {
       cam.position.copy(pos);
       cam.up.copy(up);
@@ -193,9 +203,11 @@ export default function CameraRig({
       ease: "power2.inOut",
       onStart: () => setReadyState(null),
       onUpdate: () => {
-        pos.lerpVectors(fromPos, to.position, p.t);
-        tgt.lerpVectors(fromTarget, to.target, p.t);
-        up.lerpVectors(fromUp, to.up, p.t).normalize();
+        // Read through the ref: a resize in Scan re-aims the end pose mid-tween.
+        const end = toPose.current ?? to;
+        pos.lerpVectors(fromPos, end.position, p.t);
+        tgt.lerpVectors(fromTarget, end.target, p.t);
+        up.lerpVectors(fromUp, end.up, p.t).normalize();
         apply(pos, tgt, up, fromZoom + (toZoom.current - fromZoom) * p.t);
       },
       onComplete: () => {
@@ -211,11 +223,13 @@ export default function CameraRig({
       tween.kill();
       killStateGainTween(env);
     };
-    // Size is read through sizeRef so a resize never restarts the tween.
+    // Size is read through sizeRef so a resize never restarts the tween. Insets only re-tween in Scan, the one
+    // pose that uses them (the page's camKey carries the same Scan-only key, so the settle stays honest).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, plane, elevationDeg]);
+  }, [state, plane, elevationDeg, scanInsetKey]);
 
-  // A resize only rescales zoom, preserving any orbit/zoom the user has made.
+  // A resize only rescales zoom, preserving any orbit/zoom the user has made. Scan has no orbit, and its
+  // centring depends on the size, so it is re-aimed whole.
   useEffect(() => {
     const prev = sizeRef.current;
     if (prev.width === width && prev.height === height) return;
@@ -223,6 +237,17 @@ export default function CameraRig({
     const before = fitZoom(state);
     sizeRef.current = { width, height };
     if (!cam) return;
+    if (state === "SCAN") {
+      const to = scanPose(plane, width, height, scanInsets);
+      toPose.current = to;
+      toZoom.current = to.zoom;
+      cam.position.copy(to.position);
+      cam.up.copy(to.up);
+      cam.zoom = to.zoom;
+      cam.lookAt(to.target);
+      cam.updateProjectionMatrix();
+      return;
+    }
     const k = fitZoom(state) / before;
     cam.zoom *= k;
     toZoom.current *= k;

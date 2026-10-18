@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { ViewState } from "@/components/scene/CameraRig";
 import type { Season } from "@/lib/seasons";
 import type { ThemeId } from "@/lib/themes";
@@ -47,6 +47,7 @@ export default function Hud({
   motionAllowed,
   onShake,
   shakeEnabled,
+  onChromeInsets,
   className = "",
 }: {
   input: string;
@@ -88,6 +89,8 @@ export default function Hud({
   motionAllowed: boolean;
   onShake: () => void;
   shakeEnabled: boolean;
+  /** CSS px of the view covered at the top and bottom by the resting controls. */
+  onChromeInsets: (insets: { top: number; bottom: number }) => void;
   className?: string;
 }) {
   const revealRef = useRef<HTMLButtonElement>(null);
@@ -100,11 +103,33 @@ export default function Hud({
     settingsRef.current?.focus();
   };
 
+  // Report how much of the top and bottom the resting chrome covers (top bar, status, save reason; the bottom
+  // bar). The tray is not resting chrome. Re-measured after every render (the reason line comes and goes) and on
+  // any size change; the page ignores repeats.
+  const sectionRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const s = sectionRef.current;
+    if (!s) return;
+    const box = s.getBoundingClientRect();
+    const tops = [...s.querySelectorAll('[data-chrome="top"], [role="status"], #save-reason')].map((e) => e.getBoundingClientRect().bottom);
+    const bottom = s.querySelector('[data-chrome="bottom"]')?.getBoundingClientRect().top ?? box.bottom;
+    onChromeInsets({ top: Math.ceil(Math.max(box.top, ...tops) - box.top), bottom: Math.ceil(box.bottom - bottom) });
+  });
+  const [, remeasure] = useState(0);
+  useEffect(() => {
+    const s = sectionRef.current;
+    if (!s) return;
+    const ro = new ResizeObserver(() => remeasure((n) => n + 1));
+    ro.observe(s);
+    s.querySelectorAll('[data-chrome], [role="status"]').forEach((e) => ro.observe(e));
+    return () => ro.disconnect();
+  }, []);
+
   // The section only lays out its children; it lets pointer events through to the world, its panels take them back.
   return (
-    <section aria-label="Controls" onKeyDown={onKeyDown} className={`pointer-events-none flex flex-col gap-2 p-3 md:block md:p-0 ${className}`}>
+    <section ref={sectionRef} aria-label="Controls" onKeyDown={onKeyDown} className={`pointer-events-none flex flex-col gap-2 p-3 md:block md:p-0 ${className}`}>
       {/* Top bar: the one field, Save, and the way into everything else. */}
-      <div className="hud-panel pointer-events-auto mr-1 flex flex-col gap-1 p-2 md:absolute md:top-3 md:left-3 md:w-[min(40rem,calc(100%-27.5rem))]">
+      <div data-chrome="top" className="hud-panel pointer-events-auto mr-1 flex flex-col gap-1 p-2 md:absolute md:top-3 md:left-3 md:w-[min(40rem,calc(100%-27.5rem))]">
         <div className="flex items-baseline justify-between gap-3">
           <label htmlFor="qr-input" className="hud-label">
             Link or text
@@ -192,7 +217,7 @@ export default function Hud({
       <div className="flex-1 md:hidden" />
 
       {/* Bottom bar: phones stack the dial over the hotbar; from md up they sit side by side. */}
-      <div className="flex flex-col gap-2 max-md:order-2 md:absolute md:inset-x-0 md:bottom-3 md:flex-row md:items-end md:justify-center md:gap-4">
+      <div data-chrome="bottom" className="flex flex-col gap-2 max-md:order-2 md:absolute md:inset-x-0 md:bottom-3 md:flex-row md:items-end md:justify-center md:gap-4">
         <SeasonDial season={season} onSeason={onSeason} className="pointer-events-auto mr-1 md:order-2" />
         <div className="pointer-events-auto mr-1 flex md:w-[21rem]">
           <Hotbar view={view} onView={onView} revealRef={revealRef} />

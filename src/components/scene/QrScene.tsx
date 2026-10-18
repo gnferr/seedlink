@@ -8,6 +8,7 @@ import { triggerShake } from "@/lib/motionTweens";
 import { PARTICLE_SETS, particleBounds, particleBudget, particleSize, pushBurst } from "@/lib/particles";
 import { nextLayers } from "@/lib/particleLayers";
 import { QUIET_ZONE } from "@/lib/qr";
+import { NO_INSETS, type ScanInsets } from "@/lib/scanFit";
 import type { Block } from "@/lib/solver";
 import type { Theme } from "@/lib/themes";
 import type { Season } from "@/lib/seasons";
@@ -32,7 +33,10 @@ export default function QrScene({
   season = "SUMMER",
   shakeTick = 0,
   pokeEnabled = true,
+  scanInsets = NO_INSETS,
 }: {
+  /** CSS px covered by controls at the top and bottom; the Scan camera frames the pad between them. */
+  scanInsets?: ScanInsets;
   blocks: Block[];
   size: number;
   theme: Theme;
@@ -89,7 +93,7 @@ export default function QrScene({
     setSettle({ state: s, n: settleCount.current });
   }, []);
   // Any input that re-tweens the camera voids the last settle in the same render.
-  const camKey = `${state}|${size}|${elevationDeg}`;
+  const camKey = `${state}|${size}|${elevationDeg}|${state === "SCAN" ? `${scanInsets.top}|${scanInsets.bottom}` : ""}`;
   const [seenCamKey, setSeenCamKey] = useState(camKey);
   if (seenCamKey !== camKey) {
     setSeenCamKey(camKey);
@@ -140,6 +144,7 @@ export default function QrScene({
         onSettled={handleSettled}
         env={env}
         ambientMotion={ambientMotion}
+        scanInsets={scanInsets}
       />
       {/* Unmounted, not hidden, in Scan: the graded frame is pad, blocks and background only. */}
       {state !== "SCAN" && <Meadow plane={plane} env={env} padColour={theme.colorLight} />}
