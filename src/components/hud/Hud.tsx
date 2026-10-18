@@ -12,6 +12,8 @@ import Tray, { type ColorKey } from "./Tray";
 import { HudButton, HudIcon, HudNote } from "./primitives";
 
 export type { ColorKey };
+/** CSS px covered by the resting controls at the top and bottom, and the size of the view they cover. */
+export type ChromeMeasure = { top: number; bottom: number; width: number; height: number };
 
 const TRAY_ID = "hud-tray";
 
@@ -91,7 +93,7 @@ export default function Hud({
   onShake: () => void;
   shakeEnabled: boolean;
   /** CSS px of the view covered at the top and bottom by the resting controls. */
-  onChromeInsets: (insets: { top: number; bottom: number }) => void;
+  onChromeInsets: (measure: ChromeMeasure) => void;
   /** The text does not fit in one QR code; the banner sits in the status slot. */
   tooLong: boolean;
   className?: string;
@@ -120,7 +122,12 @@ export default function Hud({
     const box = s.getBoundingClientRect();
     const tops = [...s.querySelectorAll('[data-chrome="top"], [role="status"], #save-reason, [role="alert"]')].map((e) => e.getBoundingClientRect().bottom);
     const bottom = s.querySelector('[data-chrome="bottom"]')?.getBoundingClientRect().top ?? box.bottom;
-    onChromeInsets({ top: Math.ceil(Math.max(box.top, ...tops) - box.top), bottom: Math.ceil(box.bottom - bottom) });
+    onChromeInsets({
+      top: Math.ceil(Math.max(box.top, ...tops) - box.top),
+      bottom: Math.ceil(box.bottom - bottom),
+      width: Math.round(box.width),
+      height: Math.round(box.height),
+    });
   });
   const [, remeasure] = useState(0);
   useEffect(() => {

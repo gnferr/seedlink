@@ -17,7 +17,8 @@ import { solve } from "@/lib/solver";
 import { THEMES, type Theme, type ThemeId } from "@/lib/themes";
 import { failureReason, type Separation } from "@/lib/verify";
 import { saveState } from "@/lib/save";
-import { NO_INSETS, type ScanInsets } from "@/lib/scanFit";
+import { frameKey, nextScanFrame, NO_INSETS, type ScanFrame } from "@/lib/scanFit";
+import type { ChromeMeasure } from "@/components/hud/Hud";
 
 const QrScene = dynamic(() => import("@/components/scene/QrScene"), {
   ssr: false,
@@ -58,7 +59,8 @@ export default function Home() {
   const [mode, setMode] = useState<ViewState>("EXPLORE");
   const [proximity, setProximity] = useState(1);
   const [settledKey, setSettledKey] = useState<string | null>(null);
-  const [scan, setScan] = useState<{ key: string; separation: Separation } | null>(null);
+  // `frame` is the Scan framing the check was graded under; it is not part of verifyKey.
+  const [scan, setScan] = useState<{ key: string; frame: string; separation: Separation } | null>(null);
   // Bumped when a lost WebGL context comes back, so the Scan check runs again.
   const [glEpoch, setGlEpoch] = useState(0);
   const [glbError, setGlbError] = useState(false);
@@ -108,17 +110,23 @@ export default function Home() {
   }, [input]);
 
   // The resting controls cover the top and bottom of the full-bleed world; Scan fits the pad between them.
-  // While in Scan the insets only grow (a reason line that disappears once the code verifies must not re-frame
-  // and re-check the code); outside Scan they follow the measurement. Never season- or motion-dependent.
-  const [chrome, setChrome] = useState<ScanInsets>(NO_INSETS);
+  // In Scan at one view size the insets only grow (see nextScanFrame); a new size or another view takes the fresh
+  // measurement. Never season- or motion-dependent.
+  const [chrome, setChrome] = useState<ScanFrame>({ insets: NO_INSETS, width: 0, height: 0 });
   const onChromeInsets = useCallback(
-    (i: ScanInsets) => setChrome((c) => (c.top === i.top && c.bottom === i.bottom ? c : i)),
+    (c: ChromeMeasure) =>
+      setChrome((p) =>
+        p.insets.top === c.top && p.insets.bottom === c.bottom && p.width === c.width && p.height === c.height
+          ? p
+          : { insets: { top: c.top, bottom: c.bottom }, width: c.width, height: c.height },
+      ),
     [],
   );
-  const [scanInsets, setScanInsets] = useState<ScanInsets>(NO_INSETS);
-  const nextInsets =
-    mode === "SCAN" ? { top: Math.max(scanInsets.top, chrome.top), bottom: Math.max(scanInsets.bottom, chrome.bottom) } : chrome;
-  if (nextInsets.top !== scanInsets.top || nextInsets.bottom !== scanInsets.bottom) setScanInsets(nextInsets);
+  const [frame, setFrame] = useState<ScanFrame>(chrome);
+  const nextFrame = nextScanFrame(frame, chrome.insets, chrome.width, chrome.height, mode === "SCAN");
+  if (nextFrame !== frame) setFrame(nextFrame);
+  const scanInsets = frame.insets;
+  const currentFrame = frameKey(frame);
 
   // The camera re-tweens whenever any of these change, so a settle only counts for the key it settled under.
   // Insets only move the Scan camera, so they are part of the key in Scan only.
@@ -145,10 +153,10 @@ export default function Home() {
     if (!qr || mode !== "SCAN" || !settled) return;
     const id = setTimeout(() => {
       const canvas = canvasRef.current;
-      if (canvas) setScan({ key: verifyKey, separation: sampleScan(canvas, qr.matrix, scanInsets) });
+      if (canvas) setScan({ key: verifyKey, frame: currentFrame, separation: sampleScan(canvas, qr.matrix, scanInsets) });
     }, DEBOUNCE_MS);
     return () => clearTimeout(id);
-  }, [qr, mode, settled, verifyKey, glEpoch, scanInsets]);
+  }, [qr, mode, settled, verifyKey, glEpoch, scanInsets, currentFrame]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const v = e.repeat ? null : viewForKey({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, target: e.target as HTMLElement | null });
@@ -169,7 +177,10 @@ export default function Home() {
 
   // Every export carries the code, so each needs a passed check for the current inputs and a settled
   // frame: Scan for the scan PNG and the model, Reveal for the reveal PNG. null = allowed, else why not.
-  const verified = !!separation?.separated;
+  // In Scan a pass only counts once it was graded under the framing on screen now (insets and view size), so
+  // a refit never re-enables Save on the old check. Outside Scan the frame moves freely; the last check stands.
+  const graded = !!separation && (mode !== "SCAN" || scan?.frame === currentFrame);
+  const verified = graded && !!separation?.separated;
   const blocked = useMemo(() => {
     const shared = !qr
       ? "Enter a link or text first."
@@ -180,7 +191,7 @@ export default function Home() {
           : null;
     const unchecked = mode === "SCAN" ? "Checking the code, one moment." : "Open Scan so the code can be checked, then export.";
     const scanGate =
-      mode !== "SCAN" ? (verified ? "PNG (scan) and .glb export from Scan." : unchecked) : !settled || !separation ? unchecked : null;
+      mode !== "SCAN" ? (verified ? "PNG (scan) and .glb export from Scan." : unchecked) : !settled || !graded ? unchecked : null;
     const revealGate = !verified
       ? unchecked
       : mode !== "REVEAL"
@@ -189,7 +200,7 @@ export default function Home() {
           ? "Waiting for the camera to settle."
           : null;
     return { scan: shared ?? scanGate, reveal: shared ?? revealGate };
-  }, [qr, tooLong, separation, verified, mode, settled]);
+  }, [qr, tooLong, separation, graded, verified, mode, settled]);
 
   const colors: Record<ColorKey, string> = {
     trunk: theme.regionColors.trunk,

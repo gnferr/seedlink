@@ -141,6 +141,7 @@ export default function CameraRig({
   // Tween end zoom, computed once per tween (Explore's fit walks every block); a resize rescales it.
   const toZoom = useRef(0);
   const toPose = useRef<Pose | null>(null);
+  const tweening = useRef(false);
   const scanInsetKey = state === "SCAN" ? `${scanInsets.top}|${scanInsets.bottom}` : "";
   const viewDir = useRef(new THREE.Vector3());
   const revealDir = useMemo(() => revealDirection(elevationDeg), [elevationDeg]);
@@ -201,7 +202,10 @@ export default function CameraRig({
       t: 1,
       duration: instant ? 0 : 1.2,
       ease: "power2.inOut",
-      onStart: () => setReadyState(null),
+      onStart: () => {
+        tweening.current = true;
+        setReadyState(null);
+      },
       onUpdate: () => {
         // Read through the ref: a resize in Scan re-aims the end pose mid-tween.
         const end = toPose.current ?? to;
@@ -211,6 +215,7 @@ export default function CameraRig({
         apply(pos, tgt, up, fromZoom + (toZoom.current - fromZoom) * p.t);
       },
       onComplete: () => {
+        tweening.current = false;
         if (still) restGate(env);
         else {
           rampStateGain(env, 1, reduced ? 0 : RAMP_UP_SECONDS);
@@ -221,6 +226,7 @@ export default function CameraRig({
     });
     return () => {
       tween.kill();
+      tweening.current = false;
       killStateGainTween(env);
     };
     // Size is read through sizeRef so a resize never restarts the tween. Insets only re-tween in Scan, the one
@@ -234,13 +240,13 @@ export default function CameraRig({
     const prev = sizeRef.current;
     if (prev.width === width && prev.height === height) return;
     const cam = camRef.current;
-    const before = fitZoom(state);
-    sizeRef.current = { width, height };
-    if (!cam) return;
     if (state === "SCAN") {
+      sizeRef.current = { width, height };
       const to = scanPose(plane, width, height, scanInsets);
       toPose.current = to;
       toZoom.current = to.zoom;
+      // Mid-tween, the tween already reads its end pose and zoom through the refs; snapping here would jump.
+      if (!cam || tweening.current) return;
       cam.position.copy(to.position);
       cam.up.copy(to.up);
       cam.zoom = to.zoom;
@@ -248,6 +254,9 @@ export default function CameraRig({
       cam.updateProjectionMatrix();
       return;
     }
+    const before = fitZoom(state);
+    sizeRef.current = { width, height };
+    if (!cam) return;
     const k = fitZoom(state) / before;
     cam.zoom *= k;
     toZoom.current *= k;
