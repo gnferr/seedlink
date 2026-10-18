@@ -2,8 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { SEASONS, mixHex } from "./seasons.ts";
 import {
+  GROUND_LIFT,
+  GROUND_LIFT_WEIGHT,
   SKY_THEME_WEIGHT,
   cloudColour,
+  renderGround,
+  seasonBlend,
   groundPalette,
   seasonGround,
   seasonSky,
@@ -58,4 +62,38 @@ test("every returned colour is #rrggbb", () => {
     const out = [...Object.values(groundPalette(p)), ...Object.values(skyGradient("#d5e6ef", p)), cloudColour(p)];
     for (const c of out) assert.match(c, HEX);
   }
+});
+
+const lum = (h: string) => ch(h).reduce((a, b) => a + b, 0);
+
+test("renderGround lifts the grass, shades the growth and keeps the blossom first", () => {
+  SEASONS.forEach((s, i) => {
+    const r = renderGround(i);
+    const g = seasonGround(s);
+    assert.equal(r.ground, mixHex(g.grass, GROUND_LIFT, GROUND_LIFT_WEIGHT));
+    assert.equal(r.dirt, g.dirt);
+    assert.equal(r.flowers[0], g.blossom);
+    assert.equal(r.flowers.length, 4);
+    assert.ok(lum(r.tuft) < lum(g.grass) && lum(r.bush) < lum(r.tuft) && lum(r.deepDirt) < lum(g.dirt));
+    for (const c of [r.ground, r.deepDirt, r.tuft, r.bush, ...r.flowers]) assert.match(c, HEX);
+  });
+});
+
+test("the rendered winter ground stays within 10% of the snow hex", () => {
+  const got = ch(renderGround(2).ground);
+  ch("#eef4f8").forEach((v, i) => assert.ok(Math.abs(got[i] - v) <= 25));
+});
+
+test("summer and spring flowers come in four distinct tints", () => {
+  for (const p of [0, 3]) assert.equal(new Set(renderGround(p).flowers).size, 4);
+});
+
+test("seasonBlend is 1 at the season, 0 a season away, and wraps", () => {
+  assert.equal(seasonBlend("WINTER", 2), 1);
+  assert.equal(seasonBlend("WINTER", 1.5), 0.5);
+  assert.equal(seasonBlend("WINTER", 1), 0);
+  assert.equal(seasonBlend("WINTER", 0), 0);
+  assert.equal(seasonBlend("SUMMER", 3.75), 0.75);
+  assert.equal(seasonBlend("SUMMER", 4), 1);
+  assert.equal(seasonBlend("AUTUMN", NaN), 0);
 });

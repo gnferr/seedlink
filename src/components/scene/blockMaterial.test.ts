@@ -88,3 +88,13 @@ test("grass keeps the colour the meadow gives it", () => {
   updateSwayMaterial(m, { time: 0, env, summerColour: SUMMER, kind: "grass" });
   assert.equal(m.color.getHexString(), "123456");
 });
+
+test("grass weighs sway by its own height, inside the zero-gate guard", () => {
+  const { m } = compile("grass");
+  assert.ok("SWAY_LOCAL" in m.defines!, "grass defines SWAY_LOCAL");
+  assert.ok(!("SWAY_LOCAL" in compile("canopy").m.defines!), "the canopy keeps instance-height weighting");
+  const guard = SWAY_CHUNK.indexOf("if (uStateGain != 0.0) {");
+  const local = SWAY_CHUNK.indexOf("#ifdef SWAY_LOCAL");
+  const close = SWAY_CHUNK.lastIndexOf("}");
+  assert.ok(guard >= 0 && guard < local && local < close, "#ifdef SWAY_LOCAL sits inside the guard");
+});

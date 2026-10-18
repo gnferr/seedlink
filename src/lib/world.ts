@@ -1,4 +1,4 @@
-import { mixHex, tweenSeasons } from "./seasons.ts";
+import { SEASONS, mixHex, tweenSeasons, wrapPhase } from "./seasons.ts";
 import type { Season } from "./seasons.ts";
 
 export type GroundPalette = { grass: string; dirt: string; blossom: string };
@@ -27,6 +27,52 @@ const CLOUD: Record<Season, string> = {
   WINTER: "#dfe8f0",
   SPRING: "#ffffff",
 };
+
+// Flower tints per season; index 0 is always the season's blossom. Autumn's set doubles as fallen-leaf colours.
+// Winter has no flowers (they scale to 0), so its set only keeps the sweep between seasons sensible.
+const FLOWERS: Record<Season, readonly [string, string, string, string]> = {
+  SUMMER: ["#ffd23f", "#ffffff", "#7aa7ff", "#ff8a3d"],
+  AUTUMN: ["#c8453a", "#e08a2e", "#f2c14e", "#8e3b6e"],
+  WINTER: ["#bcd4e6", "#bcd4e6", "#bcd4e6", "#bcd4e6"],
+  SPRING: ["#e8739a", "#ffffff", "#c9a0ff", "#ffd1e0"],
+};
+
+// How the meadow renders the palette. The grass top is unlit, so it is lifted toward a pale yellow to sit
+// lighter and warmer than any green canopy (snow stays white); tufts, bushes and deep dirt are shaded down.
+export const GROUND_LIFT = "#fffbd0";
+export const GROUND_LIFT_WEIGHT = 0.22;
+export const SHADE = { tuft: 0.82, bush: 0.66, deepDirt: 0.78 } as const;
+export const SNOW_CAP = "#f4f8fb";
+
+export type RenderedGround = {
+  ground: string;
+  dirt: string;
+  deepDirt: string;
+  tuft: string;
+  bush: string;
+  flowers: string[];
+};
+
+// Multiplying a colour by f in linear light, which is what three's Color.multiplyScalar does.
+const shade = (c: string, f: number) => mixHex(c, "#000000", 1 - f);
+
+export function renderGround(phase: number): RenderedGround {
+  const p = groundPalette(phase);
+  return {
+    ground: mixHex(p.grass, GROUND_LIFT, GROUND_LIFT_WEIGHT),
+    dirt: p.dirt,
+    deepDirt: shade(p.dirt, SHADE.deepDirt),
+    tuft: shade(p.grass, SHADE.tuft),
+    bush: shade(p.grass, SHADE.bush),
+    flowers: [0, 1, 2, 3].map((i) => tweenSeasons((s) => FLOWERS[s][i], phase)),
+  };
+}
+
+/** 1 at the season's phase, falling linearly to 0 one season away (wrapping): how "winter" or "autumn" the dial is. */
+export function seasonBlend(season: Season, phase: number): number {
+  const d = Math.abs(wrapPhase(phase) - SEASONS.indexOf(season));
+  return Math.max(0, 1 - Math.min(d, 4 - d));
+}
 
 export const seasonGround = (season: Season): GroundPalette => GROUND[season];
 export const seasonSky = (season: Season): Gradient => SKY[season];

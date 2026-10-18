@@ -452,7 +452,7 @@ test("losing the WebGL context blocks export until the scan re-verifies", async 
 
 test("remount shows the current season", async ({ page }) => {
   await ready(page);
-  // The lowest Reveal keeps sky in the top-left corner; higher, the meadow fills the frame.
+  // Pin the lowest Reveal: its horizon sits lowest, so the top-left corner is sky well clear of the meadow edge.
   await page.getByLabel("Reveal elevation").fill("15");
   await view(page, "REVEAL");
   await settled(page, "REVEAL");
