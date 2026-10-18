@@ -25,7 +25,8 @@ export const SLAB_DEPTH = 6;
 export const BUSH_GAP = 3;
 export const SLAB_WIDTH = 4.5;
 export const SLAB_FAR = 1;
-export const SLAB_NEAR = 2.5;
+// The canvas is full-height on phones: at 15° Reveal on 390×844 the grass must reach the bottom edge (≈4.8 measured).
+export const SLAB_NEAR = 5;
 const EDGE_MARGIN = 1.5;
 
 // Half-width of each decoration at scale 1 (the Meadow builds its boxes to these) and its scale range.

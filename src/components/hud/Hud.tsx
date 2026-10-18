@@ -1,38 +1,26 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import type { ViewState } from "@/components/scene/CameraRig";
-import ColorField from "@/components/controls/ColorField";
 import type { Season } from "@/lib/seasons";
-import { SHAPES } from "@/lib/shapes";
-import { ELEVATION_MAX_DEG, ELEVATION_MIN_DEG } from "@/lib/solver";
-import { THEMES, type ThemeId } from "@/lib/themes";
+import type { ThemeId } from "@/lib/themes";
 import type { Separation } from "@/lib/verify";
-import AlignmentBar from "./AlignmentBar";
 import Hotbar from "./Hotbar";
 import StatusPlaque from "./StatusPlaque";
-import SeasonDial, { seasonName } from "./SeasonDial";
-import { HudButton, HudIcon, HudSwitch } from "./primitives";
+import SeasonDial from "./SeasonDial";
+import Tray, { type ColorKey } from "./Tray";
+import { HudButton, HudIcon } from "./primitives";
 
-export type ColorKey = "trunk" | "canopy" | "light" | "background";
+export type { ColorKey };
 
-const COLOR_LABELS: Record<ColorKey, string> = {
-  trunk: "Trunk",
-  canopy: "Canopy",
-  light: "Base",
-  background: "Background",
-};
-
-function exportNote({ scan, reveal }: { scan: string | null; reveal: string | null }, verified: boolean): string {
-  if (scan !== null && scan === reveal) return `Export blocked. ${scan}`;
-  return [verified ? "Ready: the code scans." : "Export blocked.", scan, reveal].filter(Boolean).join(" ");
-}
+const TRAY_ID = "hud-tray";
 
 export default function Hud({
   input,
   onInput,
-  shapeId,
-  onShape,
+  modelId,
+  onModel,
+  models,
   themeId,
   onTheme,
   colors,
@@ -49,6 +37,8 @@ export default function Hud({
   onExportPng,
   onExportGlb,
   onExportReveal,
+  save,
+  onSave,
   sculpture,
   season,
   onSeason,
@@ -57,14 +47,14 @@ export default function Hud({
   motionAllowed,
   onShake,
   shakeEnabled,
-  collapsed,
-  onCollapsed,
   className = "",
 }: {
   input: string;
   onInput: (v: string) => void;
-  shapeId: string;
-  onShape: (id: string) => void;
+  modelId: string;
+  onModel: (id: string) => void;
+  /** The Model select only appears when there is a choice. */
+  models: readonly { id: string; label: string }[];
   themeId: ThemeId;
   onTheme: (id: ThemeId) => void;
   colors: Record<ColorKey, string>;
@@ -84,6 +74,9 @@ export default function Hud({
   onExportPng: () => void;
   onExportGlb: () => void;
   onExportReveal: () => void;
+  /** Save follows the view; `reason === null` means it is enabled for `target`. */
+  save: { target: "scan" | "reveal" | null; reason: string | null };
+  onSave: () => void;
   /** Size of the current sculpture; null with no code. */
   sculpture: { blocks: number; modules: number } | null;
   season: Season;
@@ -95,70 +88,32 @@ export default function Hud({
   motionAllowed: boolean;
   onShake: () => void;
   shakeEnabled: boolean;
-  /** null = auto: CSS expands it from `md` up and docks it below. The first toggle makes it explicit. */
-  collapsed: boolean | null;
-  onCollapsed: (c: boolean) => void;
   className?: string;
 }) {
   const revealRef = useRef<HTMLButtonElement>(null);
-  const auto = collapsed === null;
-  const bodyHidden = collapsed === true ? "hidden" : auto ? "max-md:hidden" : "";
-  // Only the click needs the real answer for "auto"; render stays CSS-only.
-  const toggleRef = useRef<HTMLButtonElement>(null);
-  // In auto mode CSS decides, so keep aria-expanded in step with the same breakpoint straight on the DOM node (no state).
-  useEffect(() => {
-    const el = toggleRef.current;
-    if (!auto || !el) return;
-    const mq = window.matchMedia("(min-width: 768px)");
-    const sync = () => el.setAttribute("aria-expanded", String(mq.matches));
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, [auto]);
-  const note = [
-    !motionAllowed && "Breeze is off while motion is reduced.",
-    !shakeEnabled && (motionAllowed ? "Shake works in Explore." : "Shake is off while motion is reduced."),
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const toggle = () => onCollapsed(!(collapsed ?? !window.matchMedia("(min-width: 768px)").matches));
+  const settingsRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
 
+  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.key !== "Escape" || !open) return;
+    setOpen(false);
+    settingsRef.current?.focus();
+  };
+
+  // The section only lays out its children; it lets pointer events through to the world, its panels take them back.
   return (
-    <section aria-label="Controls" className={`flex flex-col gap-1 md:gap-2 overflow-y-auto overscroll-contain pr-1 ${className}`}>
-      <div className="flex items-start gap-2">
-        <Hotbar view={view} onView={onView} revealRef={revealRef} />
-        <HudButton ref={toggleRef} onClick={toggle} aria-controls="hud-body" aria-expanded={auto ? undefined : !collapsed} className="w-11 shrink-0 px-0">
-          {(auto || collapsed) && (
-            <>
-              <HudIcon name="expand" className={auto ? "md:hidden" : ""} />
-              <span className={auto ? "sr-only md:hidden" : "sr-only"}>Expand controls</span>
-            </>
-          )}
-          {(auto || !collapsed) && (
-            <>
-              <HudIcon name="collapse" className={auto ? "max-md:hidden" : ""} />
-              <span className={auto ? "sr-only max-md:hidden" : "sr-only"}>Collapse controls</span>
-            </>
-          )}
-        </HudButton>
-      </div>
-
-      {/* Phones: dial and plaque share one row so the dock stays within 96px. */}
-      <div className="flex items-stretch gap-2 md:flex-col">
-        <SeasonDial season={season} onSeason={onSeason} className="mr-1 shrink-0 md:mr-1" />
-        <StatusPlaque separation={separation} checked={view === "SCAN"} hasCode={sculpture !== null} />
-      </div>
-
-      <div className={`hud-panel flex flex-col mb-1 gap-3 p-3 md:gap-1.5 md:p-2.5 ${bodyHidden}`} id="hud-body">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-baseline justify-between gap-3">
-            <label htmlFor="qr-input" className="hud-label">
-              Link or text
-            </label>
-            <span className="font-mono text-xs tabular-nums" aria-live="off">
-              {input.length} {input.length === 1 ? "character" : "characters"}
-            </span>
-          </div>
+    <section aria-label="Controls" onKeyDown={onKeyDown} className={`pointer-events-none flex flex-col gap-2 p-3 md:block md:p-0 ${className}`}>
+      {/* Top bar: the one field, Save, and the way into everything else. */}
+      <div className="hud-panel pointer-events-auto mr-1 flex flex-col gap-1 p-2 md:absolute md:top-3 md:left-3 md:w-[min(40rem,calc(100%-27.5rem))]">
+        <div className="flex items-baseline justify-between gap-3">
+          <label htmlFor="qr-input" className="hud-label">
+            Link or text
+          </label>
+          <span className="font-mono text-xs tabular-nums" aria-live="off">
+            {input.length} {input.length === 1 ? "character" : "characters"}
+          </span>
+        </div>
+        <div className="flex gap-2">
           <input
             id="qr-input"
             value={input}
@@ -167,118 +122,81 @@ export default function Hud({
             placeholder="https://your-link.example"
             spellCheck={false}
             autoComplete="off"
-            className="hud-field"
+            className="hud-field min-w-0 flex-1"
           />
+          <HudButton
+            disabled={save.reason !== null}
+            aria-describedby={save.reason !== null ? "save-reason" : undefined}
+            data-go={save.reason === null ? "" : undefined}
+            onClick={onSave}
+            className="shrink-0 px-3"
+          >
+            Save
+          </HudButton>
+          <HudButton
+            ref={settingsRef}
+            aria-expanded={open}
+            aria-controls={TRAY_ID}
+            onClick={() => setOpen((o) => !o)}
+            className="shrink-0 gap-2 px-0 max-md:w-11 md:px-3"
+          >
+            <HudIcon name="gear" />
+            <span className="max-md:sr-only">Settings</span>
+          </HudButton>
         </div>
+      </div>
 
-        {proximity !== null && (
-          <AlignmentBar
-            proximity={proximity}
-            onSnap={() => {
-              onView("REVEAL");
-              // The snap button unmounts once Reveal starts; keep focus on the slot that now holds the state.
-              revealRef.current?.focus();
-            }}
-          />
-        )}
-
-        <div className="flex flex-col gap-2">
-          <p className="hud-label md:hidden">
-            Season: <span className="font-sans">{seasonName(season)}</span>
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <HudSwitch label="Breeze" checked={ambientMotion} disabled={!motionAllowed} aria-describedby={note ? "engine-note" : undefined} onChange={onAmbientMotion} className="hud-tight" />
-            <HudButton disabled={!shakeEnabled} aria-describedby={note ? "engine-note" : undefined} onClick={onShake} className="hud-tight">
-              <HudIcon name="shake" className="mr-1" />
-              Shake
-            </HudButton>
-          </div>
-          {note && (
-            <p id="engine-note" className="text-sm md:text-[13px] md:leading-4">
-              {note}
-            </p>
-          )}
-        </div>
-
-        <fieldset className="grid grid-cols-2 gap-x-3 gap-y-3 md:gap-y-2">
-          <legend className="hud-label mb-2 md:mb-1">Palette</legend>
-          {(Object.keys(COLOR_LABELS) as ColorKey[]).map((k) => (
-            <ColorField key={k} label={COLOR_LABELS[k]} value={colors[k]} onChange={(hex) => onColor(k, hex)} />
-          ))}
-        </fieldset>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex min-w-0 flex-col gap-2">
-            <label htmlFor="qr-shape" className="hud-label">
-              Shape
-            </label>
-            <select id="qr-shape" value={shapeId} onChange={(e) => onShape(e.target.value)} className="hud-field">
-              {Object.values(SHAPES).map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex min-w-0 flex-col gap-2">
-            <label htmlFor="qr-theme" className="hud-label">
-              Theme
-            </label>
-            <select id="qr-theme" value={themeId} onChange={(e) => onTheme(e.target.value as ThemeId)} className="hud-field">
-              {Object.entries(THEMES).map(([id, t]) => (
-                <option key={id} value={id}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <div className="flex items-baseline justify-between">
-            <label htmlFor="qr-elevation" className="hud-label">
-              Reveal elevation
-            </label>
-            <span className="font-mono text-sm tabular-nums">{elevation}°</span>
-          </div>
-          <input
-            id="qr-elevation"
-            type="range"
-            min={ELEVATION_MIN_DEG}
-            max={ELEVATION_MAX_DEG}
-            step={1}
-            value={elevation}
-            aria-valuetext={`${elevation} degrees`}
-            onChange={(e) => onElevation(Number(e.target.value))}
-            className="w-full"
-          />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <span className="hud-label">Export</span>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { label: "PNG (scan)", run: onExportPng, gate: blocked.scan },
-              { label: ".glb model", run: onExportGlb, gate: blocked.scan },
-              { label: "PNG (reveal)", run: onExportReveal, gate: blocked.reveal },
-            ].map((b) => (
-              <HudButton key={b.label} disabled={b.gate !== null} aria-describedby="export-note" onClick={b.run} className="hud-tight">
-                {b.gate !== null && <HudIcon name="lock" className="mr-1" />}
-                {b.label}
-              </HudButton>
-            ))}
-          </div>
-          <p id="export-note" className="text-sm md:text-[13px] md:leading-4">
-            {exportError ?? exportNote(blocked, verified)}
-          </p>
-        </div>
-
-        {sculpture && (
-          <p className="text-sm md:text-[13px] md:leading-4">
-            {sculpture.blocks} blocks · {sculpture.modules}×{sculpture.modules} modules. Longer links give a finer
-            sculpture. The tree only lines up in this on-screen view; a photo of a printed copy won&rsquo;t.
+      {/* Status slot (top right; phones: under the top bar). The tray hangs below it from md up; on phones the column
+          dissolves (contents) so the tray is ordered after the spacer and sits as a sheet right above the bottom bar. */}
+      <div className="contents md:absolute md:top-3 md:right-3 md:bottom-24 md:flex md:w-[24rem] md:flex-col md:gap-2">
+        <StatusPlaque separation={separation} checked={view === "SCAN"} hasCode={sculpture !== null} />
+        {save.reason !== null && (
+          <p id="save-reason" className="hud-panel mr-1 px-3 py-1 text-[13px] leading-4">
+            {save.reason}
           </p>
         )}
+        <Tray
+          id={TRAY_ID}
+          open={open}
+          className="mr-1 mb-1 min-h-0 max-h-[60%] max-md:order-1 md:max-h-[60vh]"
+          colors={colors}
+          onColor={onColor}
+          modelId={modelId}
+          onModel={onModel}
+          models={models}
+          themeId={themeId}
+          onTheme={onTheme}
+          elevation={elevation}
+          onElevation={onElevation}
+          proximity={proximity}
+          onSnap={() => {
+            onView("REVEAL");
+            // The snap button unmounts once Reveal starts; keep focus on the slot that now holds the state.
+            revealRef.current?.focus();
+          }}
+          ambientMotion={ambientMotion}
+          onAmbientMotion={onAmbientMotion}
+          motionAllowed={motionAllowed}
+          onShake={onShake}
+          shakeEnabled={shakeEnabled}
+          blocked={blocked}
+          verified={verified}
+          exportError={exportError}
+          onExportPng={onExportPng}
+          onExportGlb={onExportGlb}
+          onExportReveal={onExportReveal}
+          sculpture={sculpture}
+        />
+      </div>
+
+      <div className="flex-1 md:hidden" />
+
+      {/* Bottom bar: phones stack the dial over the hotbar; from md up they sit side by side. */}
+      <div className="flex flex-col gap-2 max-md:order-2 md:absolute md:inset-x-0 md:bottom-3 md:flex-row md:items-end md:justify-center md:gap-4">
+        <SeasonDial season={season} onSeason={onSeason} className="pointer-events-auto mr-1 md:order-2" />
+        <div className="pointer-events-auto mr-1 flex md:w-[21rem]">
+          <Hotbar view={view} onView={onView} revealRef={revealRef} />
+        </div>
       </div>
     </section>
   );

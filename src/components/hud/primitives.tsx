@@ -2,7 +2,7 @@
 
 import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 
-export type HudIconName = "ok" | "bad" | "wait" | "lock" | "shake" | "wind" | "collapse" | "expand" | "warn";
+export type HudIconName = "ok" | "bad" | "wait" | "lock" | "shake" | "wind" | "warn" | "gear";
 
 // Strokes on a 16px grid, square caps and mitred joins so edges stay pixel-hard.
 const PATHS: Record<HudIconName, string> = {
@@ -12,9 +12,8 @@ const PATHS: Record<HudIconName, string> = {
   lock: "M5 7V4h6v3M3 7h10v7H3z",
   shake: "M1 8h2l2-4 2 8 2-8 2 4h2",
   wind: "M2 6h8V3h3M2 10h10v3h-3",
-  collapse: "M3 10l5-5 5 5",
-  expand: "M3 6l5 5 5-5",
   warn: "M8 2l7 12H1zM8 7v3M8 12v1",
+  gear: "M4 4h8v8H4zM7 1v3M9 1v3M7 12v3M9 12v3M1 7h3M1 9h3M12 7h3M12 9h3",
 };
 
 export function HudIcon({ name, className = "" }: { name: HudIconName; className?: string }) {

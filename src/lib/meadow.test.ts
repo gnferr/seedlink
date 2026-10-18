@@ -48,7 +48,7 @@ for (const plane of [25, 37, 169]) {
         assert.ok(Math.hypot(m.bushes[i].x - m.bushes[j].x, m.bushes[i].z - m.bushes[j].z) >= 3);
     assert.equal(m.slabSize, 4.5 * plane);
     assert.equal(m.slabFar, plane);
-    assert.equal(m.slabNear, 2.5 * plane);
+    assert.equal(m.slabNear, 5 * plane);
     // The pad's far corner must stay on the slab, with room for the rim.
     assert.ok(m.slabFar > (plane / Math.SQRT2) + 1);
     assert.equal(m.pad.half, plane / 2);

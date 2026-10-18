@@ -16,6 +16,7 @@ import { DEFAULT_SHAPE_ID, SHAPES } from "@/lib/shapes";
 import { solve } from "@/lib/solver";
 import { THEMES, type Theme, type ThemeId } from "@/lib/themes";
 import { failureReason, type Separation } from "@/lib/verify";
+import { saveState } from "@/lib/save";
 
 const QrScene = dynamic(() => import("@/components/scene/QrScene"), {
   ssr: false,
@@ -59,8 +60,6 @@ export default function Home() {
   const [scan, setScan] = useState<{ key: string; separation: Separation } | null>(null);
   // Bumped when a lost WebGL context comes back, so the Scan check runs again.
   const [glEpoch, setGlEpoch] = useState(0);
-  // null = auto (CSS: expanded from md up, docked below); the first toggle makes it explicit.
-  const [collapsed, setCollapsed] = useState<boolean | null>(null);
   const [glbError, setGlbError] = useState(false);
   const [season, setSeason] = useState<Season>("SUMMER");
   const [breeze, setBreeze] = useState(true);
@@ -185,6 +184,9 @@ export default function Home() {
   };
 
   const viewName = VIEW_NAMES[mode];
+  const save = saveState(mode, blocked);
+  const exportScan = () => canvasRef.current && exportPng(canvasRef.current, "voxel-qr.png");
+  const exportReveal = () => canvasRef.current && exportPng(canvasRef.current, "voxel-qr-reveal.png");
 
   return (
     <main
@@ -192,8 +194,8 @@ export default function Home() {
       style={{ background: theme.background }}
     >
       <h1 className="sr-only">Voxel QR</h1>
-      {/* Phones: the object takes the top 56%; desktop: everything left of the floating panel. */}
-      <div className="absolute inset-x-0 top-0 bottom-[44%] min-h-0 md:right-[23rem] md:bottom-0">
+      {/* The world is full-bleed; the HUD floats over its edges. */}
+      <div className="absolute inset-0 min-h-0">
         {/* Overlays stay siblings of role="img": its children are pruned from the accessibility tree. */}
         {qr ? (
           <div
@@ -225,20 +227,20 @@ export default function Home() {
         )}
 
         {tooLong && (
-          <HudNote role="alert" tone="bad" icon="warn" className="absolute inset-x-3 top-3 md:inset-x-auto md:left-4 md:max-w-md">
+          // Sits just above the bottom bar (phones: dial + hotbar rows), clear of the top bar and the status slot.
+          <HudNote role="alert" tone="bad" icon="warn" className="absolute inset-x-3 bottom-36 md:inset-x-auto md:bottom-20 md:left-3 md:max-w-md">
             Too long to fit in one QR code. Shorten the text or use a short link{qr ? " — showing your last code that fit." : "."}
           </HudNote>
         )}
       </div>
 
       <Hud
-        collapsed={collapsed}
-        onCollapsed={setCollapsed}
-        className="absolute inset-x-3 bottom-3 max-h-[calc(44%-1.5rem)] md:inset-x-auto md:top-3 md:right-4 md:bottom-auto md:max-h-[calc(100%-1.5rem)] md:w-[21rem]"
+        className="absolute inset-0"
         input={input}
         onInput={setInput}
-        shapeId={shapeId}
-        onShape={setShapeId}
+        modelId={shapeId}
+        onModel={setShapeId}
+        models={Object.values(SHAPES).map(({ id, label }) => ({ id, label }))}
         themeId={themeId}
         onTheme={(id) => {
           setThemeId(id);
@@ -256,8 +258,10 @@ export default function Home() {
         blocked={blocked}
         verified={verified}
         exportError={glbError ? "The model export failed. Try again." : null}
-        onExportPng={() => canvasRef.current && exportPng(canvasRef.current, "voxel-qr.png")}
-        onExportReveal={() => canvasRef.current && exportPng(canvasRef.current, "voxel-qr-reveal.png")}
+        onExportPng={exportScan}
+        onExportReveal={exportReveal}
+        save={save}
+        onSave={() => (save.target === "scan" ? exportScan() : save.target === "reveal" ? exportReveal() : undefined)}
         onExportGlb={() => {
           if (!qr) return;
           setGlbError(false);
