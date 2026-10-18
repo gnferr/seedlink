@@ -6,7 +6,7 @@ import { HudNote } from "@/components/hud/primitives";
 import { seasonName } from "@/components/hud/SeasonDial";
 import Hud, { type ColorKey } from "@/components/hud/Hud";
 import type { ViewState } from "@/components/scene/CameraRig";
-import { generateMatrix, type QrMatrix } from "@/lib/qr";
+import { generateMatrix, QUIET_ZONE, type QrMatrix } from "@/lib/qr";
 import { exportGlb, exportPng } from "@/lib/exporters";
 import { useReducedMotion } from "@/lib/useReducedMotion";
 import { seasonTheme, type Season } from "@/lib/seasons";
@@ -17,7 +17,7 @@ import { solve } from "@/lib/solver";
 import { THEMES, type Theme, type ThemeId } from "@/lib/themes";
 import { failureReason, type Separation } from "@/lib/verify";
 import { saveState } from "@/lib/save";
-import { frameKey, nextScanFrame, NO_INSETS, type ScanFrame } from "@/lib/scanFit";
+import { frameKey, nextScanFrame, NO_INSETS, TOO_SMALL_TO_SCAN, tooSmallToScan, type ScanFrame } from "@/lib/scanFit";
 import type { ChromeMeasure } from "@/components/hud/Hud";
 
 const QrScene = dynamic(() => import("@/components/scene/QrScene"), {
@@ -149,14 +149,18 @@ export default function Home() {
   // Verify on demand: sample only once the camera has settled in Scan, debounced on change.
   // Summer theme on purpose: Scan flattens every block and the background, so season never changes the sampled frame.
   const verifyKey = qr ? JSON.stringify([qr.text, shapeId, elevation, theme]) : "";
+  // A settled Scan whose fit can't give each module enough pixels says so instead of grading a smeared frame.
+  // Recomputed from the current fit, so it clears when the window grows or the link shortens.
+  const tooSmall =
+    !!qr && mode === "SCAN" && settled && frame.width > 0 && tooSmallToScan(frame.width, frame.height, qr.matrix.size + QUIET_ZONE * 2, scanInsets);
   useEffect(() => {
-    if (!qr || mode !== "SCAN" || !settled) return;
+    if (!qr || mode !== "SCAN" || !settled || tooSmall) return;
     const id = setTimeout(() => {
       const canvas = canvasRef.current;
       if (canvas) setScan({ key: verifyKey, frame: currentFrame, separation: sampleScan(canvas, qr.matrix, scanInsets) });
     }, DEBOUNCE_MS);
     return () => clearTimeout(id);
-  }, [qr, mode, settled, verifyKey, glEpoch, scanInsets, currentFrame]);
+  }, [qr, mode, settled, verifyKey, glEpoch, scanInsets, currentFrame, tooSmall]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const v = e.repeat ? null : viewForKey({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, target: e.target as HTMLElement | null });
@@ -186,7 +190,9 @@ export default function Home() {
       ? "Enter a link or text first."
       : tooLong
         ? "The text is too long for one QR code. Shorten it to export."
-        : separation && !separation.separated
+        : tooSmall
+          ? TOO_SMALL_TO_SCAN
+          : separation && !separation.separated
           ? `This code won't scan: ${failureReason(separation)}. Change the Base colour (or pick another theme) so it contrasts with the code.`
           : null;
     const unchecked = mode === "SCAN" ? "Checking the code, one moment." : "Open Scan so the code can be checked, then export.";
@@ -200,7 +206,7 @@ export default function Home() {
           ? "Waiting for the camera to settle."
           : null;
     return { scan: shared ?? scanGate, reveal: shared ?? revealGate };
-  }, [qr, tooLong, separation, graded, verified, mode, settled]);
+  }, [qr, tooLong, tooSmall, separation, graded, verified, mode, settled]);
 
   const colors: Record<ColorKey, string> = {
     trunk: theme.regionColors.trunk,
@@ -258,6 +264,7 @@ export default function Home() {
         className="absolute inset-0"
         onChromeInsets={onChromeInsets}
         tooLong={tooLong}
+        tooSmall={tooSmall}
         input={input}
         onInput={setInput}
         modelId={shapeId}

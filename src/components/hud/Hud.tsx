@@ -51,6 +51,7 @@ export default function Hud({
   shakeEnabled,
   onChromeInsets,
   tooLong,
+  tooSmall,
   className = "",
 }: {
   input: string;
@@ -96,6 +97,8 @@ export default function Hud({
   onChromeInsets: (measure: ChromeMeasure) => void;
   /** The text does not fit in one QR code; the banner sits in the status slot. */
   tooLong: boolean;
+  /** Scan is settled but the code is too small to scan at this window size. */
+  tooSmall: boolean;
   className?: string;
 }) {
   const revealRef = useRef<HTMLButtonElement>(null);
@@ -189,7 +192,7 @@ export default function Hud({
       {/* Status slot (top right; phones: under the top bar). The tray hangs below it from md up; on phones the column
           dissolves (contents) so the tray is ordered after the spacer and sits as a sheet right above the bottom bar. */}
       <div className="contents md:absolute md:top-3 md:right-3 md:bottom-24 md:flex md:w-[24rem] md:flex-col md:gap-2">
-        <StatusPlaque separation={separation} checked={view === "SCAN"} hasCode={sculpture !== null} />
+        <StatusPlaque separation={separation} checked={view === "SCAN"} hasCode={sculpture !== null} tooSmall={tooSmall} />
         {save.reason !== null && (
           <p id="save-reason" className="hud-panel mr-1 px-3 py-1 text-[13px] leading-4">
             {save.reason}

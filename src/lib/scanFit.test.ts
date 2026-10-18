@@ -1,6 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { FIT_MARGIN, nextScanFrame, scanFit, type ScanFrame } from "./scanFit.ts";
+import { FIT_MARGIN, MIN_SCAN_PITCH_PX, nextScanFrame, scanFit, scanPitchPx, tooSmallToScan, type ScanFrame } from "./scanFit.ts";
+
+test("pitch is the fit's zoom; too small below 1.5px, not at it", () => {
+  assert.equal(MIN_SCAN_PITCH_PX, 1.5);
+  // plane 169 (a 161-module code): a 390px-wide portrait phone gives about 2.08px, a short landscape band about 0.97px.
+  assert.ok(Math.abs(scanPitchPx(390, 844, 169, { top: 175, bottom: 112 }) - 2.077) < 0.01);
+  assert.equal(tooSmallToScan(390, 844, 169, { top: 175, bottom: 112 }), false);
+  assert.equal(tooSmallToScan(844, 390, 169, { top: 148, bottom: 60 }), true);
+  // Boundary: a free band of exactly 1.5·plane/FIT_MARGIN px gives exactly 1.5px.
+  const band = (1.5 * 100) / FIT_MARGIN;
+  assert.equal(scanPitchPx(1000, band, 100), 1.5);
+  assert.equal(tooSmallToScan(1000, band, 100), false);
+  assert.equal(tooSmallToScan(1000, band - 1, 100), true);
+});
+
+test("bad insets don't make a code look too small; insets covering the view do", () => {
+  assert.equal(tooSmallToScan(390, 844, 37, { top: NaN, bottom: -20 }), false);
+  assert.equal(tooSmallToScan(390, 844, 37, { top: 800, bottom: 800 }), true);
+});
 
 test("scanFit treats NaN and negative insets as none", () => {
   const none = scanFit(400, 800, 37);

@@ -20,6 +20,18 @@ export function scanFit(width: number, height: number, plane: number, insets: Sc
   return { zoom: (Math.min(width, free) / plane) * FIT_MARGIN, dy: (top - bottom) / 2 };
 }
 
+/** Below this module pitch (CSS px) a code can't be drawn, sampled or photographed reliably. */
+export const MIN_SCAN_PITCH_PX = 1.5;
+export const TOO_SMALL_TO_SCAN = "Too small to scan at this window size — enlarge the window or use a shorter link.";
+
+/** Module pitch of the Scan fit, in the caller's pixels. `plane` is modules plus quiet zone. */
+export const scanPitchPx = (width: number, height: number, plane: number, insets: ScanInsets = NO_INSETS) =>
+  scanFit(width, height, plane, insets).zoom;
+
+/** True when the Scan fit can't give each module MIN_SCAN_PITCH_PX. */
+export const tooSmallToScan = (width: number, height: number, plane: number, insets: ScanInsets = NO_INSETS) =>
+  scanPitchPx(width, height, plane, insets) < MIN_SCAN_PITCH_PX;
+
 /** The insets Scan frames with, and the view size they were measured in. */
 export type ScanFrame = { insets: ScanInsets; width: number; height: number };
 

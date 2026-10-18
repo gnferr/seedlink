@@ -1,13 +1,26 @@
 "use client";
 
+import { TOO_SMALL_TO_SCAN } from "@/lib/scanFit";
 import { failureReason, type Separation } from "@/lib/verify";
 import { HudIcon, type HudIconName } from "./primitives";
 
 // The idle line deliberately avoids "modules" and "Checking": tests and users filter on those words.
-export default function StatusPlaque({ separation, checked, hasCode = true }: { separation: Separation | null; checked: boolean; hasCode?: boolean }) {
-  const icon: HudIconName = separation === null ? "wait" : separation.separated ? "ok" : "bad";
-  const label =
-    separation === null
+export default function StatusPlaque({
+  separation,
+  checked,
+  hasCode = true,
+  tooSmall = false,
+}: {
+  separation: Separation | null;
+  checked: boolean;
+  hasCode?: boolean;
+  /** Scan can't give each module enough pixels at this size; replaces any verdict. */
+  tooSmall?: boolean;
+}) {
+  const icon: HudIconName = tooSmall ? "bad" : separation === null ? "wait" : separation.separated ? "ok" : "bad";
+  const label = tooSmall
+    ? TOO_SMALL_TO_SCAN
+    : separation === null
       ? !hasCode
         ? "No code to check yet."
         : checked
