@@ -13,9 +13,11 @@ import type { Theme } from "@/lib/themes";
 import type { Season } from "@/lib/seasons";
 import Blocks from "./Blocks";
 import CameraRig, { type ViewState } from "./CameraRig";
+import Clouds from "./Clouds";
 import EnvironmentDriver from "./EnvironmentDriver";
 import Meadow from "./Meadow";
 import ParticleLayer, { type Burst } from "./ParticleLayer";
+import Sky from "./Sky";
 
 export default function QrScene({
   blocks,
@@ -119,7 +121,7 @@ export default function QrScene({
       gl={{ preserveDrawingBuffer: true }}
       onCreated={({ gl }) => onCanvasReady(gl.domElement)}
     >
-      <color attach="background" args={[theme.background]} />
+      <Sky env={env} background={theme.background} scan={state === "SCAN"} />
       {/* Three-point rig: dim fill, strong key from above-front, cool rim from behind. */}
       <ambientLight intensity={0.4} />
       <directionalLight position={[-plane, plane * 1.5, plane]} intensity={2} />
@@ -141,6 +143,7 @@ export default function QrScene({
       />
       {/* Unmounted, not hidden, in Scan: the graded frame is pad, blocks and background only. */}
       {state !== "SCAN" && <Meadow plane={plane} env={env} padColour={theme.colorLight} />}
+      {state !== "SCAN" && <Clouds plane={plane} env={env} />}
       <Blocks blocks={blocks} size={size} theme={theme} flatten={state === "SCAN"}
         env={env}
         pokeEnabled={pokeEnabled && state === "EXPLORE"}
@@ -164,7 +167,6 @@ export default function QrScene({
         env={env}
         season={season}
         state={state}
-        background={theme.background}
         shakeTick={shakeTick}
       />
     </Canvas>

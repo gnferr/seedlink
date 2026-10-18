@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { DECO, meadowLayout, type Deco } from "@/lib/meadow";
 import type { Environment } from "@/lib/motion";
-import { mixHex } from "@/lib/seasons";
+import { mixHex, wrapPhase } from "@/lib/seasons";
 import { SNOW_CAP, renderGround, seasonBlend, type RenderedGround } from "@/lib/world";
 import { createSwayMaterial, updateSwayMaterial, type SwayKind } from "./blockMaterial";
 
@@ -243,7 +243,8 @@ export default function Meadow({ plane, env, padColour }: { plane: number; env: 
     f.env = env;
     for (const m of world.sway) updateSwayMaterial(m, f);
     const a = applied.current;
-    const phase = env.phase.value;
+    // Wrapped, so a non-finite phase compares equal (wrapPhase gives 0) instead of retinting every frame.
+    const phase = wrapPhase(env.phase.value);
     if (a.world === world && a.phase === phase) return;
     a.world = world;
     a.phase = phase;

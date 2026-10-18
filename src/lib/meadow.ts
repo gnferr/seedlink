@@ -119,14 +119,22 @@ export function meadowLayout(plane: number, seed = 1337): MeadowLayout {
 
   const leaves = scatter(LEAVES, "leaf");
 
-  const clouds: Cloud[] = Array.from({ length: CLOUDS }, (_, i) => ({
-    x: ((i + rand() * 0.8) / CLOUDS - 0.5) * 3.6 * plane,
-    y: 1.1 * plane + (rand() - 0.5) * 0.2 * plane,
-    z: -(0.8 + rand() * 0.9) * plane,
-    w: 4 + rand() * 4,
-    d: 3 + rand() * 3,
-    speed: 0.3 + rand() * 0.5,
-  }));
+  // Clouds sit behind the tree in the slab frame, with along = -1.22·y: a cloud's Reveal screen height
+  // v = y·cosφ - along·sinφ is then 1.28·y at 15°, 1.48·y at 30° and 1.56·y at 60°, i.e. about 0.8, 0.9 and
+  // 0.95 plane: beside the crown, and above the 60° horizon (0.87 plane). They alternate sides, clear of the crown.
+  const clouds: Cloud[] = Array.from({ length: CLOUDS }, (_, i) => {
+    const y = (0.59 + rand() * 0.04) * plane;
+    const along = -1.22 * y;
+    const across = (i % 2 ? -1 : 1) * (0.55 + ((i >> 1) + rand() * 0.6) * 0.4) * plane;
+    return {
+      x: (along + across) / Math.SQRT2,
+      y,
+      z: (along - across) / Math.SQRT2,
+      w: (0.14 + rand() * 0.1) * plane,
+      d: (0.06 + rand() * 0.03) * plane,
+      speed: (0.008 + rand() * 0.012) * plane,
+    };
+  });
 
   return {
     slabSize: SLAB_WIDTH * plane,
@@ -140,4 +148,15 @@ export function meadowLayout(plane: number, seed = 1337): MeadowLayout {
     leaves,
     clouds,
   };
+}
+
+/**
+ * One frame of cloud drift along its lane. `drive` is the caller's gate product (stateGain · calm): at 0, or with
+ * any non-finite input or a non-positive dt, the offset is returned exactly, so a still frame stays bit-identical.
+ * Otherwise it advances by speed · dt · drive and wraps into [-wrapAt, wrapAt].
+ */
+export function cloudOffset(prev: number, dt: number, speed: number, drive: number, wrapAt: number): number {
+  if (!(drive > 0) || !(dt > 0) || !(wrapAt > 0) || ![prev, dt, speed, drive, wrapAt].every(Number.isFinite)) return prev;
+  const span = 2 * wrapAt;
+  return ((((prev + speed * dt * drive + wrapAt) % span) + span) % span) - wrapAt;
 }

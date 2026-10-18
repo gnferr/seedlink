@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DECO, MAX_DECOR, PAD_CLEAR, meadowLayout, type DecoKind } from "./meadow.ts";
+import { DECO, MAX_DECOR, PAD_CLEAR, cloudOffset, meadowLayout, type DecoKind } from "./meadow.ts";
 
 // Slab-frame coordinates (see MeadowLayout): along runs toward the Reveal camera, across side to side.
 const slabFrame = (d: { x: number; z: number }) => ({ along: (d.x + d.z) / Math.SQRT2, across: (d.x - d.z) / Math.SQRT2 });
@@ -52,7 +52,7 @@ for (const plane of [25, 37, 169]) {
     // The pad's far corner must stay on the slab, with room for the rim.
     assert.ok(m.slabFar > (plane / Math.SQRT2) + 1);
     assert.equal(m.pad.half, plane / 2);
-    assert.ok(m.clouds.every((c) => c.z < 0 && c.speed > 0));
+    assert.ok(m.clouds.every((c) => slabFrame(c).along < 0 && c.y > 0 && c.speed > 0), "clouds behind the tree");
   });
 }
 
@@ -63,4 +63,36 @@ test("bad plane returns an empty layout", () => {
     assert.equal(m.slabFar + m.slabNear, 0);
     assert.equal(m.tufts.length + m.flowers.length + m.bushes.length + m.clouds.length, 0);
   }
+});
+
+test("cloudOffset holds prev exactly when not driven or given bad input", () => {
+  const prev = 1.2345678901234;
+  for (const [dt, speed, drive, wrapAt] of [
+    [0.016, 0.5, 0, 50],
+    [0.016, 0.5, -1, 50],
+    [NaN, 0.5, 1, 50],
+    [Infinity, 0.5, 1, 50],
+    [-0.016, 0.5, 1, 50],
+    [0.016, NaN, 1, 50],
+    [0.016, Infinity, 1, 50],
+    [0.016, 0.5, NaN, 50],
+    [0.016, 0.5, Infinity, 50],
+    [0.016, 0.5, 1, NaN],
+    [0.016, 0.5, 1, 0],
+  ])
+    assert.equal(cloudOffset(prev, dt, speed, drive, wrapAt), prev);
+  assert.ok(Number.isNaN(cloudOffset(NaN, 0.016, 0.5, 1, 50)));
+});
+
+test("cloudOffset advances in proportion to dt, speed and drive", () => {
+  const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} vs ${b}`);
+  near(cloudOffset(2, 0.1, 0.5, 1, 50), 2.05);
+  near(cloudOffset(2, 0.1, 0.5, 0.5, 50), 2.025);
+  near(cloudOffset(2, 0.2, 1, 1, 50), 2.2);
+});
+
+test("cloudOffset wraps into [-wrapAt, wrapAt] both ways", () => {
+  const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} vs ${b}`);
+  near(cloudOffset(9.9, 1, 0.3, 1, 10), -9.8);
+  near(cloudOffset(-9.9, 1, -0.3, 1, 10), 9.8);
 });
