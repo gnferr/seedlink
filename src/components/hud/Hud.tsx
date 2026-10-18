@@ -9,7 +9,7 @@ import Hotbar from "./Hotbar";
 import StatusPlaque from "./StatusPlaque";
 import SeasonDial from "./SeasonDial";
 import Tray, { type ColorKey } from "./Tray";
-import { HudButton, HudIcon } from "./primitives";
+import { HudButton, HudIcon, HudNote } from "./primitives";
 
 export type { ColorKey };
 
@@ -48,6 +48,7 @@ export default function Hud({
   onShake,
   shakeEnabled,
   onChromeInsets,
+  tooLong,
   className = "",
 }: {
   input: string;
@@ -91,14 +92,20 @@ export default function Hud({
   shakeEnabled: boolean;
   /** CSS px of the view covered at the top and bottom by the resting controls. */
   onChromeInsets: (insets: { top: number; bottom: number }) => void;
+  /** The text does not fit in one QR code; the banner sits in the status slot. */
+  tooLong: boolean;
   className?: string;
 }) {
   const revealRef = useRef<HTMLButtonElement>(null);
   const settingsRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
 
+  const trayRef = useRef<HTMLDivElement>(null);
+  // Escape belongs to the tray: only from inside it or from Settings, never from the field or the hotbar.
   const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
     if (e.key !== "Escape" || !open) return;
+    const t = e.target as Node;
+    if (!trayRef.current?.contains(t) && !settingsRef.current?.contains(t)) return;
     setOpen(false);
     settingsRef.current?.focus();
   };
@@ -111,7 +118,7 @@ export default function Hud({
     const s = sectionRef.current;
     if (!s) return;
     const box = s.getBoundingClientRect();
-    const tops = [...s.querySelectorAll('[data-chrome="top"], [role="status"], #save-reason')].map((e) => e.getBoundingClientRect().bottom);
+    const tops = [...s.querySelectorAll('[data-chrome="top"], [role="status"], #save-reason, [role="alert"]')].map((e) => e.getBoundingClientRect().bottom);
     const bottom = s.querySelector('[data-chrome="bottom"]')?.getBoundingClientRect().top ?? box.bottom;
     onChromeInsets({ top: Math.ceil(Math.max(box.top, ...tops) - box.top), bottom: Math.ceil(box.bottom - bottom) });
   });
@@ -163,10 +170,11 @@ export default function Hud({
             aria-expanded={open}
             aria-controls={TRAY_ID}
             onClick={() => setOpen((o) => !o)}
-            className="shrink-0 gap-2 px-0 max-md:w-11 md:px-3"
+            className="shrink-0 gap-2 px-0 max-lg:w-11 lg:px-3"
           >
             <HudIcon name="gear" />
-            <span className="max-md:sr-only">Settings</span>
+            {/* Icon-only below lg so the link field keeps its room; the name is always Settings. */}
+            <span className="max-lg:sr-only">Settings</span>
           </HudButton>
         </div>
       </div>
@@ -180,7 +188,13 @@ export default function Hud({
             {save.reason}
           </p>
         )}
+        {tooLong && (
+          <HudNote role="alert" tone="bad" icon="warn" className="pointer-events-auto mr-1">
+            Too long to fit in one QR code. Shorten the text or use a short link{sculpture ? " — showing your last code that fit." : "."}
+          </HudNote>
+        )}
         <Tray
+          ref={trayRef}
           id={TRAY_ID}
           open={open}
           className="mr-1 mb-1 min-h-0 max-h-[60%] max-md:order-1 md:max-h-[60vh]"

@@ -115,15 +115,22 @@ select {
 /* Pressed: the shadow is spent moving the button down-right by its own offset. */
 .hud-btn:active:not([aria-disabled="true"]),
 .hud-btn[aria-pressed="true"],
-.hud-btn[aria-checked="true"] {
+.hud-btn[aria-checked="true"],
+.hud-btn[aria-expanded="true"] {
   transform: translate(4px, 4px);
   box-shadow: none;
 }
 
+/* Settings open reads like a pressed slot; the tray itself opens instantly, so nothing animates here. */
 .hud-btn[aria-pressed="true"],
-.hud-btn[aria-checked="true"] {
+.hud-btn[aria-checked="true"],
+.hud-btn[aria-expanded="true"] {
   background: var(--hud-accent);
   color: var(--hud-accent-ink);
+}
+
+.hud-btn[aria-expanded] {
+  transition: none;
 }
 
 .hud-btn[aria-disabled="true"] {

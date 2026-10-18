@@ -1,5 +1,6 @@
 "use client";
 
+import type { Ref } from "react";
 import ColorField from "@/components/controls/ColorField";
 import { ELEVATION_MAX_DEG, ELEVATION_MIN_DEG } from "@/lib/solver";
 import { THEMES, type ThemeId } from "@/lib/themes";
@@ -48,7 +49,9 @@ export default function Tray({
   onExportReveal,
   sculpture,
   className = "",
+  ref,
 }: {
+  ref?: Ref<HTMLDivElement>;
   id: string;
   open: boolean;
   colors: Record<ColorKey, string>;
@@ -85,6 +88,7 @@ export default function Tray({
 
   return (
     <div
+      ref={ref}
       id={id}
       role="region"
       aria-label="Settings"

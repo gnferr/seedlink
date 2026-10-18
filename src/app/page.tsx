@@ -241,18 +241,12 @@ export default function Home() {
         ) : (
           <HudNote centered>Type or paste a link to build your object.</HudNote>
         )}
-
-        {tooLong && (
-          // Sits just above the bottom bar (phones: dial + hotbar rows), clear of the top bar and the status slot.
-          <HudNote role="alert" tone="bad" icon="warn" className="absolute inset-x-3 bottom-36 md:inset-x-auto md:bottom-20 md:left-3 md:max-w-md">
-            Too long to fit in one QR code. Shorten the text or use a short link{qr ? " — showing your last code that fit." : "."}
-          </HudNote>
-        )}
       </div>
 
       <Hud
         className="absolute inset-0"
         onChromeInsets={onChromeInsets}
+        tooLong={tooLong}
         input={input}
         onInput={setInput}
         modelId={shapeId}
