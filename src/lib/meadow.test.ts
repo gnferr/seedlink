@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DECO, MAX_DECOR, PAD_CLEAR, cloudOffset, meadowLayout, type DecoKind } from "./meadow.ts";
+import { CLOUD_WRAP, DECO, MAX_DECOR, PAD_CLEAR, cloudAcross, cloudFade, cloudOffset, meadowLayout, type DecoKind } from "./meadow.ts";
 
 // Slab-frame coordinates (see MeadowLayout): along runs toward the Reveal camera, across side to side.
 const slabFrame = (d: { x: number; z: number }) => ({ along: (d.x + d.z) / Math.SQRT2, across: (d.x - d.z) / Math.SQRT2 });
@@ -95,4 +95,40 @@ test("cloudOffset wraps into [-wrapAt, wrapAt] both ways", () => {
   const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} vs ${b}`);
   near(cloudOffset(9.9, 1, 0.3, 1, 10), -9.8);
   near(cloudOffset(-9.9, 1, -0.3, 1, 10), 9.8);
+});
+
+for (const plane of [25, 37, 169]) {
+  test(`plane ${plane}: clouds start full size, inside the lane and outside the widest frame's fade`, () => {
+    const wrapAt = CLOUD_WRAP * plane;
+    for (const c of meadowLayout(plane).clouds) {
+      const a = cloudAcross(c);
+      assert.ok(Math.abs(a) + c.w / 2 < wrapAt, "cloud inside its lane");
+      assert.equal(cloudFade(a, wrapAt), 1, "laid-out cloud is full size");
+    }
+    // Widest expected frame: Explore at 21:9 reaches ~2.36 planes across; the fade starts past it.
+    assert.equal(cloudFade(2.36 * plane, wrapAt), 1);
+  });
+}
+
+test("a drifting cloud wraps at the lane end, not relative to its start", () => {
+  const plane = 37;
+  const wrapAt = CLOUD_WRAP * plane;
+  const c = meadowLayout(plane).clouds[5];
+  let a = cloudAcross(c);
+  let last = a;
+  // Drift until it wraps; it must leave at +wrapAt and come back at -wrapAt, invisible at both ends.
+  for (let i = 0; i < 100000 && a >= last; i++) {
+    last = a;
+    a = cloudOffset(a, 0.1, c.speed, 1, wrapAt);
+  }
+  assert.ok(last > wrapAt - 1 && a < -wrapAt + 1, `${last} -> ${a}`);
+  assert.ok(cloudFade(last, wrapAt) < 0.01 && cloudFade(a, wrapAt) < 0.01);
+});
+
+test("cloudFade is 0 at and past the lane ends and for bad input", () => {
+  assert.equal(cloudFade(30, 30), 0);
+  assert.equal(cloudFade(-31, 30), 0);
+  assert.equal(cloudFade(NaN, 30), 0);
+  assert.equal(cloudFade(0, 0), 0);
+  assert.equal(cloudFade(0, 30), 1);
 });

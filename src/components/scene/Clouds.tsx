@@ -4,13 +4,11 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { cloudOffset, meadowLayout, type Cloud } from "@/lib/meadow";
+import { CLOUD_WRAP, cloudAcross, cloudFade, cloudOffset, meadowLayout, type Cloud } from "@/lib/meadow";
 import type { Environment } from "@/lib/motion";
 import { wrapPhase } from "@/lib/seasons";
 import { cloudColour } from "@/lib/world";
 
-// Lanes run across the Reveal view; past this many planes either side a cloud wraps round, out of frame.
-const WRAP = 1.8;
 const THICKNESS = 0.3; // of a cloud's depth
 const noRaycast = () => null;
 const o = new THREE.Object3D();
@@ -35,41 +33,47 @@ function cloudGeometry() {
   return shadeFaces(g);
 }
 
-function place(mesh: THREE.InstancedMesh, clouds: Cloud[], offsets: Float64Array) {
-  clouds.forEach((c, i) => {
+// `across` holds each cloud's absolute lane position, so it wraps at the lane ends, off frame.
+function place(mesh: THREE.InstancedMesh, clouds: Cloud[], across: Float64Array, wrapAt: number) {
+  for (let i = 0; i < clouds.length; i++) {
+    const c = clouds[i];
     // Drift runs along the Reveal screen's right, world (1, 0, -1)/√2, the slab's `across` axis.
-    const s = offsets[i] / Math.SQRT2;
+    const s = (across[i] - cloudAcross(c)) / Math.SQRT2;
+    const k = cloudFade(across[i], wrapAt);
     o.position.set(c.x + s, c.y, c.z - s);
     o.rotation.set(0, Math.PI / 4, 0);
-    o.scale.set(c.w, c.d * THICKNESS, c.d);
+    o.scale.set(c.w * k, c.d * THICKNESS * k, c.d * k);
     o.updateMatrix();
     mesh.setMatrixAt(i, o.matrix);
-  });
+  }
   mesh.instanceMatrix.needsUpdate = true;
-}
-
-function drift(clouds: Cloud[], offsets: Float64Array, dt: number, drive: number, wrapAt: number) {
-  clouds.forEach((c, i) => (offsets[i] = cloudOffset(offsets[i], dt, c.speed, drive, wrapAt)));
 }
 
 function buildClouds(plane: number) {
   const clouds = meadowLayout(plane).clouds;
+  const wrapAt = CLOUD_WRAP * plane;
   const geometry = cloudGeometry();
   // Unlit and not tone-mapped: cloud tops show the season's cloud hex whatever the lights do. Drawn first and
   // without depth, clouds are part of the sky: anything else in the scene covers them, from every orbit angle.
   const material = new THREE.MeshBasicMaterial({ toneMapped: false, vertexColors: true, depthTest: false, depthWrite: false });
   const mesh = new THREE.InstancedMesh(geometry, material, clouds.length);
-  const offsets = new Float64Array(clouds.length);
-  place(mesh, clouds, offsets);
+  const across = new Float64Array(clouds.length);
+  const reset = () => {
+    for (let i = 0; i < clouds.length; i++) across[i] = cloudAcross(clouds[i]);
+    place(mesh, clouds, across, wrapAt);
+  };
+  reset();
   mesh.frustumCulled = false; // instances drift past the static bounds
   mesh.raycast = noRaycast;
   mesh.renderOrder = -1;
   return {
     mesh,
     material,
+    /** Back to the laid-out positions, so every Reveal shows the tuned frame. */
+    reset,
     step(dt: number, drive: number) {
-      drift(clouds, offsets, dt, drive, WRAP * plane);
-      place(mesh, clouds, offsets);
+      for (let i = 0; i < clouds.length; i++) across[i] = cloudOffset(across[i], dt, clouds[i].speed, drive, wrapAt);
+      place(mesh, clouds, across, wrapAt);
     },
     dispose() {
       mesh.dispose();
@@ -80,9 +84,13 @@ function buildClouds(plane: number) {
 }
 
 /** Blocky clouds behind the tree. They drift only while stateGain · calm > 0, so still frames stay bit-still. */
-export default function Clouds({ plane, env }: { plane: number; env: Environment }) {
+export default function Clouds({ plane, env, reveal }: { plane: number; env: Environment; reveal: boolean }) {
   const sky = useMemo(() => buildClouds(plane), [plane]);
   useEffect(() => () => sky.dispose(), [sky]);
+  // Snaps back while the camera tweens to Reveal; once there, drive is 0 and nothing moves.
+  useEffect(() => {
+    if (reveal) sky.reset();
+  }, [reveal, sky]);
   const applied = useRef({ sky: null as typeof sky | null, phase: NaN });
 
   useFrame((_, dt) => {

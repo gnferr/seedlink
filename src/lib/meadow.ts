@@ -151,6 +151,23 @@ export function meadowLayout(plane: number, seed = 1337): MeadowLayout {
 }
 
 /**
+ * Cloud lanes wrap at ±CLOUD_WRAP planes across. The widest Reveal frame at 21:9 reaches 2.09 planes across
+ * (60°), Explore at the Reveal azimuth about 2.36; clouds shrink to nothing over the outer CLOUD_FADE of the
+ * lane, so the wrap itself is never seen, even from orbit angles that bring the lane ends into frame.
+ */
+export const CLOUD_WRAP = 3;
+const CLOUD_FADE = 0.2;
+
+/** A cloud's position across the Reveal view (the slab's `across` axis): the inverse of the layout's x/z. */
+export const cloudAcross = (c: { x: number; z: number }): number => (c.x - c.z) / Math.SQRT2;
+
+/** Scale for a cloud at `across`: 1 inside the lane, falling to 0 at ±wrapAt. */
+export function cloudFade(across: number, wrapAt: number): number {
+  const k = (wrapAt - Math.abs(across)) / (CLOUD_FADE * wrapAt);
+  return Number.isFinite(k) ? Math.min(1, Math.max(0, k)) : 0;
+}
+
+/**
  * One frame of cloud drift along its lane. `drive` is the caller's gate product (stateGain · calm): at 0, or with
  * any non-finite input or a non-positive dt, the offset is returned exactly, so a still frame stays bit-identical.
  * Otherwise it advances by speed · dt · drive and wraps into [-wrapAt, wrapAt].

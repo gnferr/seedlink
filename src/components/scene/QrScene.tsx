@@ -143,7 +143,7 @@ export default function QrScene({
       />
       {/* Unmounted, not hidden, in Scan: the graded frame is pad, blocks and background only. */}
       {state !== "SCAN" && <Meadow plane={plane} env={env} padColour={theme.colorLight} />}
-      {state !== "SCAN" && <Clouds plane={plane} env={env} />}
+      {state !== "SCAN" && <Clouds plane={plane} env={env} reveal={state === "REVEAL"} />}
       <Blocks blocks={blocks} size={size} theme={theme} flatten={state === "SCAN"}
         env={env}
         pokeEnabled={pokeEnabled && state === "EXPLORE"}
