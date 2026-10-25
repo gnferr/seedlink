@@ -87,8 +87,17 @@ test("typing a new link while folded never shows the old verdict", async ({ page
     w.seen = [];
     new MutationObserver(() => w.seen.push(document.querySelector("button.hint")?.textContent ?? "")).observe(document.body, { subtree: true, childList: true, characterData: true });
   });
-  await field(page).pressSequentially("x");
-  await disabled(page); // immediately, before the debounced link catches up
+  // Type in-page and read Save one frame later: it must already be disabled, well inside the 300 ms debounce.
+  const typed = await page.evaluate(async () => {
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="Link or text"]')!;
+    const t0 = performance.now();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, input.value + "x");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((r) => requestAnimationFrame(r));
+    return { saveDisabled: document.querySelector(".save")!.getAttribute("aria-disabled"), ms: performance.now() - t0 };
+  });
+  expect(typed.saveDisabled).toBe("true");
+  expect(typed.ms).toBeLessThan(250);
   await expect(chip(page)).toContainText("Tap the tree", { timeout: 30_000 });
   expect(await page.evaluate(() => (window as unknown as { seen: string[] }).seen.filter((t) => /^Scans/.test(t)))).toEqual([]);
   expect(await hint(page)).not.toMatch(/^Scans/);
