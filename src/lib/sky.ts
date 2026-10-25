@@ -29,8 +29,9 @@ export function skyRamp(spec: SkySpec): RGB[] {
   });
 }
 
-export function renderSky(season: Season): Uint8ClampedArray {
-  const spec = PALETTES[season].sky, ramp = skyRamp(spec);
+// `spec` is overridable only so tests can render a season without its aurora.
+export function renderSky(season: Season, spec: SkySpec = PALETTES[season].sky): Uint8ClampedArray {
+  const ramp = skyRamp(spec);
   const d = new Uint8ClampedArray(W * H * 4);
   const r = mulberry32(hashString(season));
   const fAt = (x: number, y: number) => {
@@ -43,6 +44,18 @@ export function renderSky(season: Season): Uint8ClampedArray {
   const pick = (f: number, x: number, y: number) => { const i = Math.floor(f); return Math.min(N - 1, i + (f - i > B8[y & 7][x & 7] ? 1 : 0)); };
   const put = (x: number, y: number, c: RGB) => { const o = (y * W + x) * 4; d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255; };
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) put(x, y, ramp[pick(fAt(x, y), x, y)]);
+  if (spec.aurora) {
+    const au = [1, 3, 5].map((i) => parseInt(spec.aurora!.slice(i, i + 2), 16)) as RGB;
+    for (let x = 0; x < W; x++) {
+      const top = 18 + Math.round(Math.sin(x / 19) * 6 + Math.sin(x / 7) * 2);
+      const h = 10 + Math.round((Math.sin(x / 9) + 1) * 4);
+      for (let k = 0; k < h; k++) {
+        const y = top + k;
+        if ((1 - k / h) * (0.5 + 0.5 * Math.sin(x / 13)) <= B8[y & 7][x & 7]) continue;
+        put(x, y, mixRGB(ramp[pick(fAt(x, y) + 1.2, x, y)], au, 0.22));
+      }
+    }
+  }
   for (let i = 0; i < spec.stars; i++) {
     const x = Math.floor(r() * W), y = Math.floor(Math.pow(r(), 1.7) * H * 0.5);
     if (fAt(x, y) < N * 0.45) put(x, y, i % 3 ? ramp[N - 1] : [255, 248, 228]);
