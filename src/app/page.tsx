@@ -25,8 +25,8 @@ const IslandScene = dynamic(() => import("@/components/island/IslandScene"), {
   loading: () => <HudNote centered>Preparing the 3D view…</HudNote>,
 });
 // shortcut: temporary Task 8 wiring with fixed props; Task 10 owns the real page.
-const logTap = (action: string) => console.log(action);
-const ignorePhase = () => {};
+// Temporary wiring until Task 10: log phases, fold/grow on the tree taps.
+const logPhase = (phase: string) => console.log("phase", phase);
 
 const DEFAULT_URL = "https://example.com";
 const DEFAULT_THEME: ThemeId = "MINECRAFT";
@@ -52,6 +52,11 @@ class SceneBoundary extends Component<{ children: React.ReactNode }, { failed: b
 }
 
 export default function Home() {
+  const [folded, setFolded] = useState(false);
+  const onTap = useCallback((action: "fold" | "grow" | "poke") => {
+    console.log(action);
+    if (action !== "poke") setFolded(action === "fold");
+  }, []);
   const [input, setInput] = useState(DEFAULT_URL);
   const [qr, setQr] = useState<Qr | null>(() => ({ text: DEFAULT_URL, matrix: generateMatrix(DEFAULT_URL) }));
   const [tooLong, setTooLong] = useState(false);
@@ -246,11 +251,11 @@ export default function Home() {
                 matrix={qr.matrix}
                 season="SUMMER"
                 leaf={null}
-                folded={false}
-                reducedMotion={false}
+                folded={folded}
+                reducedMotion={!motionAllowed}
                 insets={scanInsets}
-                onPhase={ignorePhase}
-                onTap={logTap}
+                onPhase={logPhase}
+                onTap={onTap}
                 onCanvasReady={onCanvasReady}
               />
             </SceneBoundary>

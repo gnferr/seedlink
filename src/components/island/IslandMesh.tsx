@@ -1,12 +1,14 @@
 "use client";
 
-import { useLayoutEffect, useRef, type Ref } from "react";
+import { useLayoutEffect, useRef, type Ref, type RefObject } from "react";
+import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Island, IslandVoxel } from "@/lib/island";
 import { INK, PAD, PALETTES } from "@/lib/palette";
 import { isFinder, type DarkModule } from "@/lib/qr";
 import { hash3 } from "@/lib/rng";
 import type { Season } from "@/lib/seasons";
+import type { FoldState } from "./IslandScene";
 
 const dummy = new THREE.Object3D();
 const colour = new THREE.Color();
@@ -14,6 +16,7 @@ const stone = new THREE.Color();
 const TILE = { width: 0.98, height: 0.2, y: 0.1 };
 const FLOWERS = ["#f4e27a", "#ffb0cc", "#ffffff"];
 const WATER = ["#b6e2ff", "#7cc4ff", "#7cc4ff"];
+const ink = new THREE.Color(INK);
 
 function voxelColour(v: IslandVoxel, season: Season, out: THREE.Color) {
   const p = PALETTES[season];
@@ -59,12 +62,16 @@ export default function IslandMesh({
   dark,
   size,
   season,
+  fold,
+  reducedMotion,
   groupRef,
 }: {
   island: Island;
   dark: DarkModule[];
   size: number;
   season: Season;
+  fold: RefObject<FoldState>;
+  reducedMotion: boolean;
   /** Everything a tap counts as ground. */
   groupRef?: Ref<THREE.Group>;
 }) {
@@ -93,6 +100,28 @@ export default function IslandMesh({
     if (kind === "tuft") return c.set(grass[2]).multiplyScalar(0.85);
     return c.set(season === "WINTER" ? "#dfe8f3" : FLOWERS[Math.floor(tint * 100) % 3]);
   }, [decos, season, grass]);
+
+  // Finders read as grass in the tree state and turn ink as the tree folds; the waterfall flows until folded.
+  const last = useRef<{ t: number; tiles: unknown; grass: unknown; dark: unknown; flow: number }>({ t: NaN, tiles: null, grass: null, dark: null, flow: -1 });
+  useFrame(({ clock }) => {
+    const { t } = fold.current;
+    const l = last.current;
+    const tm = tiles.current;
+    if (tm && (t !== l.t || tm !== l.tiles || grass !== l.grass || dark !== l.dark)) {
+      dark.forEach((m, i) => {
+        if (isFinder(m.col, m.row, size)) tm.setColorAt(i, colour.set(grass[1]).multiplyScalar(1.05).lerp(ink, t));
+      });
+      if (tm.instanceColor) tm.instanceColor.needsUpdate = true;
+      Object.assign(l, { t, tiles: tm, grass, dark });
+    }
+    const wm = water.current;
+    const flow = Math.floor(clock.elapsedTime * 8);
+    if (wm && !reducedMotion && t < 1 && flow !== l.flow) {
+      for (let k = 0; k < waterfall.length; k++) wm.setColorAt(k, colour.set(WATER[(k + flow) % 3]));
+      if (wm.instanceColor) wm.instanceColor.needsUpdate = true;
+      l.flow = flow;
+    }
+  });
 
   useInstances(water, waterfall.length, (k, o) => o.position.set(waterfall.x, -0.5 - k, waterfall.z),
     (k, c) => c.set(WATER[k % 3]), [waterfall]);
