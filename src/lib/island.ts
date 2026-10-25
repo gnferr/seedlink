@@ -27,8 +27,12 @@ export function growIsland(seed: number, size: number): Island {
   const taper = 1 + r() * 0.5;
   const lean = [(r() - 0.5) * 6, (r() - 0.5) * 6];
 
+  // Superellipse whose exponent grows with the slab so its corners clear the slab corners (plus taper loss).
+  const H = slabHalf + 7;
+  const corner = 1.08 * (slabHalf + 1) * Math.SQRT2 + 3;
+  const p = Math.min(40, Math.max(5, Math.LN2 / Math.log(Math.max(1.0001, (H * Math.SQRT2) / corner))));
   const rimAt = (a: number) => {
-    const sq = (slabHalf + 2.6) / Math.pow(Math.abs(Math.cos(a)) ** 5 + Math.abs(Math.sin(a)) ** 5, 1 / 5);
+    const sq = H / Math.pow(Math.abs(Math.cos(a)) ** p + Math.abs(Math.sin(a)) ** p, 1 / p);
     let v = 0;
     for (const [k, amp, ph] of harm) v += amp * Math.sin(k * a + ph);
     let rr = sq + 1.1 * v;

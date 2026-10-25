@@ -48,3 +48,22 @@ test("deco and waterfall stay off the slab", () => {
     }
   }
 });
+
+test("slab corners keep a grass ring and an underside rim beyond them", () => {
+  for (const size of [21, 25, 29, 37, 45, 57]) {
+    for (const seed of seeds) {
+      const { slabHalf: s, voxels } = growIsland(seed, size);
+      const at = new Set(voxels.map((v) => `${v.x},${v.z},${v.depth}`));
+      for (let x = -s - 1; x <= s + 1; x++)
+        for (let z = -s - 1; z <= s + 1; z++)
+          assert.ok(at.has(`${x},${z},0`), `size ${size} seed ${seed} cell ${x},${z}`);
+      for (const sx of [-1, 1])
+        for (const sz of [-1, 1]) {
+          const ok = voxels.some(
+            (v) => v.depth === 1 && v.x * sx >= s && v.z * sz >= s && (v.x * sx >= s + 1 || v.z * sz >= s + 1),
+          );
+          assert.ok(ok, `size ${size} seed ${seed} quadrant ${sx},${sz}`);
+        }
+    }
+  }
+});
