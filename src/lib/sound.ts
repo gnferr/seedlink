@@ -6,8 +6,12 @@ let on = false;
 export function setSoundOn(next: boolean): void {
   on = next;
   if (!on) return;
-  ctx ??= new AudioContext();
-  void ctx.resume();
+  try {
+    ctx ??= new AudioContext();
+  } catch {
+    return; // no Web Audio here: stay silent
+  }
+  ctx.resume().catch(() => {});
 }
 
 function tone(freq: number, t0: number, dur: number, type: OscillatorType = "triangle", vol = 0.12) {

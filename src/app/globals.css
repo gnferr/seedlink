@@ -3,7 +3,15 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
-  --ring: #18181b;
+  --ring: #ffd27a;
+  /* Sky Island controls: night ink glass, moon-cream selection, leaf-green Save, firefly-gold focus. */
+  --ink: 28 26 58;
+  --ink-deep: 16 14 38;
+  --dusk: 139 127 184;
+  --moon: #f3ecd2;
+  --leaf: #5fb35a;
+  --leaf-dark: #3f8a45;
+  --firefly: #ffd27a;
   --accent: #2f6b22;
   --selection: #cfe8bf;
   /* HUD skin: parchment. Independent of the sculpture's theme. 4px is the spacing grid. */
@@ -34,7 +42,7 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
-    --ring: #f4f4f5;
+    --ring: #ffd27a;
     --accent: #7cc66a;
     --selection: #2f5226;
     /* HUD skin: stone. */
@@ -231,3 +239,89 @@ select {
   background: var(--hud-accent);
   border-color: var(--hud-ink);
 }
+
+/* ---------- Sky Island: pixel-stepped dithered glass (spike take 2) ---------- */
+.ui {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  font: 15px var(--font-pixel), ui-monospace, monospace;
+  color: var(--moon);
+  pointer-events: none;
+}
+.ui > * { pointer-events: auto; }
+.px { width: 18px; height: 18px; flex: none; shape-rendering: crispEdges; }
+
+/* Staircase corners: three steps of --s on every corner. */
+.step,
+.step-lg {
+  --s: 3px;
+  clip-path: polygon(calc(var(--s)*3) 0, calc(100% - var(--s)*3) 0, calc(100% - var(--s)*3) var(--s), calc(100% - var(--s)) var(--s), calc(100% - var(--s)) calc(var(--s)*3), 100% calc(var(--s)*3), 100% calc(100% - var(--s)*3), calc(100% - var(--s)) calc(100% - var(--s)*3), calc(100% - var(--s)) calc(100% - var(--s)), calc(100% - var(--s)*3) calc(100% - var(--s)), calc(100% - var(--s)*3) 100%, calc(var(--s)*3) 100%, calc(var(--s)*3) calc(100% - var(--s)), var(--s) calc(100% - var(--s)), var(--s) calc(100% - var(--s)*3), 0 calc(100% - var(--s)*3), 0 calc(var(--s)*3), var(--s) calc(var(--s)*3), var(--s) var(--s), calc(var(--s)*3) var(--s));
+}
+.step-lg { --s: 4px; }
+
+.pixel-glass { padding: 4px; background: rgb(243 236 210 / .32); }
+.pixel-glass > .inner {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4' shape-rendering='crispEdges'%3E%3Crect width='1' height='1' fill='%23ffffff' fill-opacity='.07'/%3E%3Crect x='2' y='2' width='1' height='1' fill='%23ffffff' fill-opacity='.07'/%3E%3C/svg%3E"),
+    linear-gradient(rgb(var(--ink) / .5), rgb(var(--ink) / .8));
+  background-size: 4px 4px, auto;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.row { display: flex; align-items: center; gap: 6px; }
+.well { background: rgb(var(--ink-deep) / .55); box-shadow: inset 0 2px 0 rgb(0 0 0 / .25); }
+
+.field { display: flex; align-items: center; gap: 10px; height: 42px; width: 250px; padding: 0 14px; min-width: 0; }
+.field .px { color: rgb(var(--dusk)); }
+.field input { all: unset; width: 100%; min-width: 0; font: inherit; color: var(--moon); letter-spacing: .02em; }
+.field input::placeholder { color: rgb(var(--dusk)); opacity: 1; }
+.field:focus-within { outline: 2px solid var(--firefly); outline-offset: -3px; }
+.field input:focus-visible { outline: none; }
+.field:has(input[aria-invalid="true"]) { box-shadow: inset 0 -3px 0 #ff9b7a; }
+
+.btn { all: unset; box-sizing: border-box; height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; color: var(--moon); padding: 0 12px; }
+.btn.icon { width: 42px; padding: 0; }
+.btn.idle { color: rgb(var(--dusk)); }
+.btn.idle:hover { color: var(--moon); }
+.btn.sel { background: var(--moon); color: #2a2342; box-shadow: inset 0 -3px 0 #b9ae8a; }
+.btn.save { padding: 0 16px 0 12px; background: var(--leaf); color: #10240f; font-weight: 600; box-shadow: inset 0 -4px 0 var(--leaf-dark), inset 0 2px 0 rgb(255 255 255 / .25); }
+.btn.save[aria-disabled="true"] { background: rgb(var(--dusk) / .35); color: rgb(243 236 210 / .8); box-shadow: none; cursor: not-allowed; }
+.btn[aria-pressed="true"].well { color: var(--firefly); }
+/* clip-path would cut an outside ring off, so stepped controls draw it inside. */
+.btn:focus-visible, .hint:focus-visible { outline: 2px solid var(--firefly); outline-offset: -3px; }
+
+.seg { display: flex; gap: 4px; padding: 4px; }
+.seg .btn { height: 36px; font-size: 14px; }
+.swatches { display: flex; gap: 8px; padding: 9px 12px; }
+.swatches button { all: unset; width: 22px; height: 22px; cursor: pointer; box-shadow: inset 0 -3px 0 rgb(0 0 0 / .22), inset 0 2px 0 rgb(255 255 255 / .2); }
+.swatches button[aria-pressed="true"] { outline: 2px solid var(--moon); outline-offset: 2px; }
+.swatches button:focus-visible { outline: 2px solid var(--firefly); outline-offset: 2px; }
+
+.hint { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px 8px 10px; font-size: 14px; color: var(--moon); cursor: pointer; text-align: left; }
+.hint[aria-disabled="true"] { cursor: default; }
+.hint .px { color: var(--firefly); }
+
+.panel { padding: 10px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.panel-wrap { transform-origin: bottom center; animation: rise .22s cubic-bezier(.2,.9,.3,1.2); }
+@keyframes rise { from { opacity: 0; transform: translateY(12px) scale(.96); } }
+@media (prefers-reduced-motion: reduce) { .panel-wrap { animation: none; } }
+
+.pill-row { padding: 6px; }
+
+@media (max-width: 640px) {
+  .seg-label { display: none; }
+  .pill { width: 100%; box-sizing: border-box; }
+  .field { width: auto; flex: 1; }
+}
+
+/* The chip and pill column spans the width (the pill fills it on phones) but only its controls take taps. */
+.ui > .bar { display: flex; width: 100%; flex-direction: column; align-items: center; gap: 10px; pointer-events: none; }
+.bar > * { pointer-events: auto; }

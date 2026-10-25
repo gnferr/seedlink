@@ -18,13 +18,13 @@ const pixel = Pixelify_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Voxel QR — scannable 3D QR codes",
+  title: "Sky Island — a tree that folds into your QR code",
   description:
-    "Turn a link into a 3D object that still scans from directly above. Style it, rotate it, and take it away as an image.",
+    "Paste a link and a voxel tree grows on a floating island. Tap it and it folds into a QR code that scans; save it as an image.",
   openGraph: {
-    title: "Voxel QR — scannable 3D QR codes",
+    title: "Sky Island — a tree that folds into your QR code",
     description:
-      "Turn a link into a 3D object that still scans from directly above.",
+      "Paste a link and a voxel tree grows on a floating island. Tap it and it folds into a QR code that scans.",
     type: "website",
   },
 };
