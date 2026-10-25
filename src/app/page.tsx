@@ -159,13 +159,14 @@ export default function Home() {
     [fold],
   );
 
-  // A result for other inputs is never shown; a pass counts only under the framing on screen now.
+  // A result for other inputs is never shown, including while the field is ahead of the debounced link;
+  // a pass counts only under the framing on screen now.
   const status: StatusInput = {
     hasCode: !empty,
     tooLong,
     tooSmall,
     phase,
-    separation: scan?.key === verifyKey ? scan.separation : null,
+    separation: scan?.key === verifyKey && input === qr.text ? scan.separation : null,
     gradedNow: scan?.frame === currentFrame,
   };
   const blocked = saveBlockedReason(status);
