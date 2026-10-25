@@ -93,10 +93,10 @@ export default function TreeMesh({
     if (full && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     const ex = extras.current;
     if (ex && full) {
-      plan.extras.forEach((j, i) => {
-        write(ex, i, extraPose(dark[j], t, pose));
+      for (let i = 0; i < plan.extras.length; i++) {
+        write(ex, i, extraPose(dark[plan.extras[i]], t, pose));
         ex.setColorAt(i, ink);
-      });
+      }
       ex.instanceMatrix.needsUpdate = true;
       if (ex.instanceColor) ex.instanceColor.needsUpdate = true;
     }
@@ -105,7 +105,11 @@ export default function TreeMesh({
       mesh.computeBoundingSphere();
       ex?.computeBoundingSphere();
     }
-    Object.assign(l, { t, colours, mesh, extras: ex, sway });
+    l.t = t;
+    l.colours = colours;
+    l.mesh = mesh;
+    l.extras = ex;
+    l.sway = sway;
   });
 
   return (

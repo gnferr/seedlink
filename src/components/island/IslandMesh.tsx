@@ -108,11 +108,14 @@ export default function IslandMesh({
     const l = last.current;
     const tm = tiles.current;
     if (tm && (t !== l.t || tm !== l.tiles || grass !== l.grass || dark !== l.dark)) {
-      dark.forEach((m, i) => {
-        if (isFinder(m.col, m.row, size)) tm.setColorAt(i, colour.set(grass[1]).multiplyScalar(1.05).lerp(ink, t));
-      });
+      for (let i = 0; i < dark.length; i++) {
+        if (isFinder(dark[i].col, dark[i].row, size)) tm.setColorAt(i, colour.set(grass[1]).multiplyScalar(1.05).lerp(ink, t));
+      }
       if (tm.instanceColor) tm.instanceColor.needsUpdate = true;
-      Object.assign(l, { t, tiles: tm, grass, dark });
+      l.t = t;
+      l.tiles = tm;
+      l.grass = grass;
+      l.dark = dark;
     }
     const wm = water.current;
     const flow = Math.floor(clock.elapsedTime * 8);

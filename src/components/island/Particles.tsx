@@ -25,7 +25,9 @@ export default function Particles({ tree, season, fold }: { tree: Tree; season: 
     if (!m) return;
     const time = clock.elapsedTime;
     const hide = 1 - fold.current.t;
-    seeds.forEach(([a, b, c, d], i) => {
+    for (let i = 0; i < COUNT; i++) {
+      const seed = seeds[i];
+      const a = seed[0], b = seed[1], c = seed[2], d = seed[3];
       let s = 1;
       if (kind === "firefly") {
         const ang = a * 6.28 + time * 0.3 * (b + 0.5);
@@ -40,7 +42,7 @@ export default function Particles({ tree, season, fold }: { tree: Tree; season: 
       dummy.scale.setScalar(Math.max(1e-4, s * hide));
       dummy.updateMatrix();
       m.setMatrixAt(i, dummy.matrix);
-    });
+    }
     m.instanceMatrix.needsUpdate = true;
   });
 
