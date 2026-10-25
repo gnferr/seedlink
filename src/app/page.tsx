@@ -20,10 +20,13 @@ import { saveState } from "@/lib/save";
 import { frameKey, nextScanFrame, NO_INSETS, TOO_SMALL_TO_SCAN, tooSmallToScan, type ScanFrame } from "@/lib/scanFit";
 import type { ChromeMeasure } from "@/components/hud/Hud";
 
-const QrScene = dynamic(() => import("@/components/scene/QrScene"), {
+const IslandScene = dynamic(() => import("@/components/island/IslandScene"), {
   ssr: false,
   loading: () => <HudNote centered>Preparing the 3D view…</HudNote>,
 });
+// shortcut: temporary Task 8 wiring with fixed props; Task 10 owns the real page.
+const logTap = (action: string) => console.log(action);
+const ignorePhase = () => {};
 
 const DEFAULT_URL = "https://example.com";
 const DEFAULT_THEME: ThemeId = "MINECRAFT";
@@ -238,20 +241,17 @@ export default function Home() {
             className="absolute inset-0"
           >
             <SceneBoundary>
-              <QrScene
-                blocks={blocks}
-                size={qr.matrix.size}
-                theme={theme}
-                state={mode}
-                elevationDeg={elevation}
-                onProximityChange={setProximity}
+              <IslandScene
+                text={qr.text}
+                matrix={qr.matrix}
+                season="SUMMER"
+                leaf={null}
+                folded={false}
+                reducedMotion={false}
+                insets={scanInsets}
+                onPhase={ignorePhase}
+                onTap={logTap}
                 onCanvasReady={onCanvasReady}
-                onSettled={onSettled}
-                season={season}
-                ambientMotion={ambientMotion}
-                shakeTick={shakeTick}
-                pokeEnabled={shakeEnabled}
-                scanInsets={scanInsets}
               />
             </SceneBoundary>
           </div>
