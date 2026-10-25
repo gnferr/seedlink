@@ -1,4 +1,7 @@
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
+import { QUIET_ZONE } from "../src/lib/qr";
+import { scanFit } from "../src/lib/scanFit";
 
 const VERDICT = /^Scans · (\d+)\/\1 modules/;
 const NOT_FOLDED = "Fold the tree into your code first, then save.";
@@ -51,6 +54,86 @@ test("keyboard fold reaches the verdict and Save downloads the PNG", async ({ pa
   await enabled(page);
   const [dl] = await Promise.all([page.waitForEvent("download"), save(page).click()]);
   expect(dl.suggestedFilename()).toBe("sky-island-qr.png");
+});
+
+// An independent scan check of the saved file: finder rings and the quiet zone, sampled here (not by sampleScan).
+test("the saved PNG has three finder patterns and a light quiet zone", async ({ page }) => {
+  await ready(page);
+  await fold(page);
+  const total = Number(VERDICT.exec(await hint(page))![1]);
+  const size = Math.sqrt(total);
+  expect(Number.isInteger(size)).toBe(true);
+  const [dl] = await Promise.all([page.waitForEvent("download"), save(page).click()]);
+  const url = `data:image/png;base64,${readFileSync((await dl.path())!).toString("base64")}`;
+  // The PNG is the drawing buffer; the page framed the code with CSS-px insets measured as below.
+  const geo = await page.evaluate(async (src) => {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height;
+    const ctx = c.getContext("2d", { willReadFrequently: true })!;
+    ctx.drawImage(img, 0, 0);
+    (window as unknown as { png: CanvasRenderingContext2D }).png = ctx;
+    const main = document.querySelector("main")!.getBoundingClientRect();
+    const bottom = Math.ceil(main.bottom - document.querySelector(".bar")!.getBoundingClientRect().top);
+    return { w: img.width, h: img.height, cssH: document.querySelector("canvas")!.clientHeight, bottom };
+  }, url);
+  const k = geo.h / geo.cssH;
+  const { zoom: pitch, dy } = scanFit(geo.w, geo.h, size + 2 * QUIET_ZONE, { top: 0, bottom: geo.bottom * k });
+  const mid = (size - 1) / 2;
+  const at = (x: number, z: number) => [Math.floor(geo.w / 2 + (x - mid) * pitch), Math.floor(geo.h / 2 + dy + (z - mid) * pitch)];
+
+  const dark: number[][] = [], light: number[][] = [], quiet: number[][] = [];
+  for (const [fx, fz] of [[0, 0], [size - 7, 0], [0, size - 7]])
+    for (let i = 0; i < 7; i++)
+      for (let j = 0; j < 7; j++) {
+        const ring = Math.max(Math.abs(i - 3), Math.abs(j - 3)); // 3: dark border, 2: light ring, <= 1: dark centre
+        (ring === 2 ? light : dark).push(at(fx + i, fz + j));
+      }
+  for (let z = -QUIET_ZONE; z < size + QUIET_ZONE; z++)
+    for (let x = -QUIET_ZONE; x < size + QUIET_ZONE; x++)
+      if (x < 0 || z < 0 || x >= size || z >= size) quiet.push(at(x, z));
+
+  const luma = (pts: number[][]) =>
+    page.evaluate((pts) => {
+      const ctx = (window as unknown as { png: CanvasRenderingContext2D }).png;
+      return pts.map(([x, y]) => {
+        const d = ctx.getImageData(x, y, 1, 1).data;
+        return 0.2126 * d[0] + 0.7152 * d[1] + 0.0722 * d[2];
+      });
+    }, pts);
+  const [d, l, q] = [await luma(dark), await luma(light), await luma(quiet)];
+  const maxDark = Math.max(...d);
+  const minLight = Math.min(...l, ...q);
+  expect(minLight - maxDark, `finder dark max ${maxDark}, light/quiet min ${minLight}`).toBeGreaterThan(60);
+  // Uniform: no quiet-zone module strays far from the others (a tile or shadow would).
+  expect(Math.max(...q) - Math.min(...q), "quiet zone spread").toBeLessThan(40);
+});
+
+test("the season panel takes focus and gives it back", async ({ page }) => {
+  await ready(page);
+  const button = page.getByRole("button", { name: /^Season and colours/ });
+  await expect(button).toHaveAttribute("aria-controls", "season-panel");
+  await button.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("radio", { name: "Summer" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#season-panel")).toHaveCount(0);
+  await expect(button).toBeFocused();
+  // Escape with focus outside the panel leaves it there.
+  await openPanel(page);
+  await field(page).focus();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#season-panel")).toHaveCount(0);
+  await expect(field(page)).toBeFocused();
+  // An outside pointer-down while focus is in the panel returns focus to the season button.
+  await openPanel(page);
+  await expect(page.getByRole("radio", { name: "Summer" })).toBeFocused();
+  await page.mouse.click(10, 10);
+  await expect(page.locator("#season-panel")).toHaveCount(0);
+  await expect(button).toBeFocused();
 });
 
 for (const s of ["Spring", "Summer", "Autumn", "Winter"]) {
