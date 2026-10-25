@@ -77,6 +77,7 @@ export default function Home() {
         setEmpty(false);
         setTooLong(false);
       } catch {
+        setEmpty(false); // too long is not empty, whatever came before
         setTooLong(true);
       }
     }, DEBOUNCE_MS);

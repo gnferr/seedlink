@@ -8,6 +8,8 @@
   --ink: 28 26 58;
   --ink-deep: 16 14 38;
   --dusk: 139 127 184;
+  /* Dusk lifted to 4.5:1 on the glass well, for idle labels (still clearly not the moon-cream selection). */
+  --dusk-text: 160 150 202;
   --moon: #f3ecd2;
   --leaf: #5fb35a;
   --leaf-dark: #3f8a45;
@@ -289,7 +291,7 @@ select {
 
 .btn { all: unset; box-sizing: border-box; height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; color: var(--moon); padding: 0 12px; }
 .btn.icon { width: 42px; padding: 0; }
-.btn.idle { color: rgb(var(--dusk)); }
+.btn.idle { color: rgb(var(--dusk-text)); }
 .btn.idle:hover { color: var(--moon); }
 .btn.sel { background: var(--moon); color: #2a2342; box-shadow: inset 0 -3px 0 #b9ae8a; }
 .btn.save { padding: 0 16px 0 12px; background: var(--leaf); color: #10240f; font-weight: 600; box-shadow: inset 0 -4px 0 var(--leaf-dark), inset 0 2px 0 rgb(255 255 255 / .25); }
