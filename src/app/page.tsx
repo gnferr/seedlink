@@ -17,13 +17,12 @@ import { hintAction, hintText, saveBlockedReason, type FoldPhase, type StatusInp
 import { playChime, playChirp, setSoundOn } from "@/lib/sound";
 
 function Note({ children }: { children: ReactNode }) {
-  return <p className="absolute inset-0 flex items-center justify-center p-4 text-center font-[family-name:var(--font-pixel)] text-[#f3ecd2]">{children}</p>;
+  return <p className="pointer-events-none absolute inset-0 flex items-center justify-center p-4 text-center font-[family-name:var(--font-pixel)] text-[#f3ecd2]">{children}</p>;
 }
 
-const IslandScene = dynamic(() => import("@/components/island/IslandScene"), {
-  ssr: false,
-  loading: () => <Note>Preparing the island…</Note>,
-});
+// The loading note is the page's (outside role="img", so it is read out), shown until the canvas is ready.
+const IslandScene = dynamic(() => import("@/components/island/IslandScene"), { ssr: false, loading: () => null });
+const UNAVAILABLE = "3D view unavailable — your browser could not start WebGL.";
 
 const DEFAULT_URL = "https://example.com";
 const DEBOUNCE_MS = 300;
@@ -31,13 +30,16 @@ const DEBOUNCE_MS = 300;
 type Qr = { text: string; matrix: QrMatrix };
 
 // Canvas rethrows renderer-creation failures (no WebGL) into the tree; the controls stay usable.
-class SceneBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+class SceneBoundary extends Component<{ children: ReactNode; onFail(): void }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
   }
+  componentDidCatch() {
+    this.props.onFail();
+  }
   render() {
-    return this.state.failed ? <Note>3D view unavailable — your browser could not start WebGL.</Note> : this.props.children;
+    return this.state.failed ? null : this.props.children;
   }
 }
 
@@ -57,6 +59,8 @@ export default function Home() {
   const [glEpoch, setGlEpoch] = useState(0);
   const [soundOn, setSoundOnState] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [sceneReady, setSceneReady] = useState(false);
+  const [sceneFailed, setSceneFailed] = useState(false);
   const reducedMotion = useReducedMotion();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const mainRef = useRef<HTMLElement>(null);
@@ -140,13 +144,16 @@ export default function Home() {
 
   const onCanvasReady = useCallback((c: HTMLCanvasElement) => {
     canvasRef.current = c;
+    setSceneReady(true);
     // A lost context leaves a blank buffer: drop the result so nothing saves until it re-checks.
     c.addEventListener("webglcontextlost", () => setScan(null));
     c.addEventListener("webglcontextrestored", () => setGlEpoch((n) => n + 1));
   }, []);
 
+  // The phase moves now, not on the scene's next frame, so Save is refused in this same render.
   const fold = useCallback((to: boolean) => {
     setFolded(to);
+    setPhase(to ? "folding" : "growing");
     playChime(to ? "fold" : "grow");
   }, []);
   // A tap on the world that only dismissed the season panel does nothing else.
@@ -171,21 +178,30 @@ export default function Home() {
     gradedNow: scan?.frame === currentFrame,
   };
   const blocked = saveBlockedReason(status);
-  const hint = hintText(status);
-  const action = hintAction(phase);
+  const hint = sceneFailed ? UNAVAILABLE : hintText(status);
+  const action = sceneFailed ? null : hintAction(phase);
 
   useEffect(() => {
     if (!panelOpen) return;
+    // Focus lands on the checked season, so Tab walks the panel before the rest of the controls.
+    panelRef.current?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus();
+    const focusInPanel = () => !!panelRef.current?.contains(document.activeElement);
     const onDown = (e: PointerEvent) => {
       const t = e.target as Node;
       if (panelRef.current?.contains(t) || seasonButtonRef.current?.contains(t)) return;
       dismissedAt.current = performance.now();
+      const restore = focusInPanel();
       setPanelOpen(false);
+      // After this click's own focus change: keep a focusable target's focus, otherwise don't drop it to <body>.
+      if (restore) setTimeout(() => {
+        if (!document.activeElement || document.activeElement === document.body) seasonButtonRef.current?.focus();
+      }, 0);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      const restore = focusInPanel();
       setPanelOpen(false);
-      seasonButtonRef.current?.focus();
+      if (restore) seasonButtonRef.current?.focus();
     };
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);
@@ -202,7 +218,7 @@ export default function Home() {
       <div role="img" aria-label={`A floating island whose tree folds into the QR code for "${qr.text}".`} data-phase={phase} className="absolute inset-0">
         {/* Mount once the controls are measured, so the first fit already leaves room for them. */}
         {frame.width > 0 && (
-          <SceneBoundary>
+          <SceneBoundary onFail={() => setSceneFailed(true)}>
             <IslandScene
               text={qr.text}
               matrix={qr.matrix}
@@ -218,6 +234,7 @@ export default function Home() {
           </SceneBoundary>
         )}
       </div>
+      {sceneFailed ? <Note>{UNAVAILABLE}</Note> : !sceneReady && <Note>Preparing the island…</Note>}
 
       <div className="ui">
         {panelOpen && (

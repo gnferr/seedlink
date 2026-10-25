@@ -92,12 +92,22 @@ function Taps({ phase, tree, ground, onTap }: {
   const raycaster = useThree((s) => s.raycaster);
   useEffect(() => {
     const el = gl.domElement;
-    let down: { x: number; y: number } | null = null;
-    const onDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY }; };
+    // A gesture that ever had two pointers down (a pinch) is never a tap.
+    const active = new Set<number>();
+    let down: { id: number; x: number; y: number; multi: boolean } | null = null;
+    const onDown = (e: PointerEvent) => {
+      active.add(e.pointerId);
+      if (active.size === 1) down = { id: e.pointerId, x: e.clientX, y: e.clientY, multi: false };
+      else if (down) down.multi = true;
+    };
+    // On window, so a pointer released off the canvas is forgotten too (bubbles after the canvas's onUp).
+    const onRelease = (e: PointerEvent) => { active.delete(e.pointerId); };
     const onUp = (e: PointerEvent) => {
-      const up = { x: e.clientX, y: e.clientY };
-      if (!down || !isTap(down, up)) return;
+      const d = down;
+      if (!d || d.id !== e.pointerId) return;
       down = null;
+      const up = { x: e.clientX, y: e.clientY };
+      if (d.multi || !isTap(d, up)) return;
       const r = el.getBoundingClientRect();
       raycaster.setFromCamera(new THREE.Vector2(((up.x - r.left) / r.width) * 2 - 1, -((up.y - r.top) / r.height) * 2 + 1), camera);
       const t = tree.current ? raycaster.intersectObject(tree.current, true)[0] : undefined;
@@ -108,9 +118,13 @@ function Taps({ phase, tree, ground, onTap }: {
     };
     el.addEventListener("pointerdown", onDown);
     el.addEventListener("pointerup", onUp);
+    window.addEventListener("pointerup", onRelease);
+    window.addEventListener("pointercancel", onRelease);
     return () => {
       el.removeEventListener("pointerdown", onDown);
       el.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointerup", onRelease);
+      window.removeEventListener("pointercancel", onRelease);
     };
   }, [gl, camera, raycaster, phase, tree, ground, onTap]);
   return null;

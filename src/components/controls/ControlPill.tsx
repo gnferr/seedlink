@@ -35,6 +35,7 @@ export default function ControlPill({ input, onInput, invalid, season, panelOpen
           type="button"
           className="btn icon sel step"
           aria-expanded={panelOpen}
+          aria-controls="season-panel"
           aria-label={`Season and colours (${SEASON_LABEL[season]})`}
           title="Season and colours"
           onClick={onTogglePanel}
