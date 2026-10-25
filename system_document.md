@@ -1,6 +1,41 @@
-# [SYSTEM_DOCUMENT]: Anamorphic QR Sculpture Generator (PRD & TDD)
-# [VERSION]: 2.1.0
-# [SUPERSEDES]: 2.0.0 ("Anamorphic QR Sculpture Generator"), and 1.0.0 ("3D Dynamic QR Code Generator")
+# [SYSTEM_DOCUMENT]: Sky Island QR Generator (PRD & TDD)
+# [VERSION]: 3.0.0
+# [SUPERSEDES]: 2.1.0 ("Anamorphic QR Sculpture Generator"), 2.0.0 and 1.0.0. Everything below the v3.0.0 section is kept as history.
+
+## v3.0.0. [THE_FOLD] (current; read this first)
+
+The design spec is `docs/superpowers/specs/2026-10-25-sky-island-design.md`. It is the authority for behaviour and look; this section records what it changes in this document.
+
+### What replaced what
+
+Versions 2.0 and 2.1 hid the code inside an anamorphic sculpture: a solver chose block heights so the object resolved into a shape from one camera angle while the top-down view stayed a QR code. In practice that produced a thin, awkward tree and a mostly empty pad. Version 3.0.0 drops the anamorphic mechanism entirely. The app now grows a full voxel tree on a floating island, standing on a slab that shows the QR code. Tapping the tree **folds** it: each dark module of the code receives exactly one tree block, the leftover blocks shrink into the slab, the camera eases to straight top-down and the island goes still. Tapping again grows the tree back. Typing a new link regrows the world, and the island's outline and depth are grown deterministically from the link.
+
+The fold replaces §4 (the anamorphic solver, projection basis and contact-ground rule) and the Explore / Reveal / Scan modes of §5 and §11. The solver, the shape library, the theme presets, the elevation control, the Reveal PNG and the `.glb` export no longer exist. Season names, the QR matrix generation of §4A, the quiet zone and error correction level H carry over unchanged. PNG is the only export.
+
+### Scan guarantee, restated for the fold
+
+The guarantee used to hold by construction, because the solver never moved a block in x or z. It now holds by the folded layout: in the folded state the top-down render of the slab is the code. The slab is the matrix plus a light quiet zone of at least four modules (`QUIET_ZONE` in `src/lib/qr.ts`) on every side, and grass starts outside it. Folded module blocks and finder tiles are the ink colour, never grass green. Colour, season and lighting can still destroy contrast, so the guarantee is verified, not assumed.
+
+### §4G verification, for the folded state
+
+Verification keeps the existing method (`src/lib/verify.ts`, `src/lib/sampleScan.ts`): sample every module centre of the rendered folded frame, compare with the matrix, and require separation and contrast above `MIN_SCAN_CONTRAST`. The verdict is shown as text plus an icon. The check runs once, after the fold has finished and the camera has settled, debounced on change and never per frame. A verdict for different inputs is never shown, and a lost WebGL context drops the verdict until the code is checked again. Save, the only export, is blocked, not warned, unless a passed check exists for the current link, season and leaf colour in the settled folded state. A disabled Save states its reason in text. "Too small to scan" (`tooSmallToScan` in `src/lib/scanFit.ts`) keeps working against the folded framing.
+
+### §11 still-frame rule, for the folded state
+
+The world is alive only while the tree stands. Once the tree is folded and settled, nothing moves in the graded region: no island bob, no leaf sway, particles hidden, and the waterfall and other effects either outside the slab or paused. A season change while folded re-checks the code. Ambient motion never runs while the frame is graded or saved. With reduced motion, fold and grow are instant, and there is no bob, sway or particles; season changes snap.
+
+### Unchanged
+
+The app is client-side only, a static deploy, and no data leaves the browser. The accessibility floor of §6 still binds: the link field is labelled, fold and grow are reachable by keyboard (the hint chip is a real button), the season choice is a named radiogroup, and a polite live region announces fold, grow and the verdict.
+
+### History
+
+Sections §0 to §11 below describe versions 1.0 to 2.1. Where they conflict with this section (the solver, the three view modes, themes, hotkeys, `.glb`), this section wins.
+
+---
+
+# [HISTORY]: the v2.1.0 header, kept as it was.
+# [VERSION_AT_THE_TIME]: 2.1.0
 # [INTENT_FOR_AGENT]: Ingest these requirements to plan and build the application. The [ANAMORPHIC_SOLVER] section (§4) is the core and the top-down scan guarantee is the law. The gamified UI, environment, shader and particle work in §1–§3, §5, §7 and §11 exists to make the product delightful and must never weaken that guarantee. Where any v2.1 visual or motion feature conflicts with a scan-view guarantee, the scan-view guarantee wins. Read §0A and §11 before planning.
 
 ## 0. [WHAT_CHANGED_FROM_V1]
