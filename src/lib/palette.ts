@@ -1,4 +1,5 @@
 import type { Season } from "./seasons.ts";
+import type { Species } from "./tree.ts";
 
 export const INK = "#2a2140";
 export const PAD = "#e6e0ef";
@@ -46,4 +47,39 @@ export function leafShade(base: string, shade: number, sunlit: boolean): string 
     return Math.round((l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))) * 255).toString(16).padStart(2, "0");
   };
   return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+export type TreeColours = { leaves: string[]; speck: string | null; bark: string; twig: string; barkMarks: string | null; leafKeep: number; snowCap: string | null };
+
+const GREEN = ["#1f5c2c", "#2f7d3b", "#3f9a4a", "#55b45c", "#6fc96e", "#9adf86"];
+const SPECIES_LEAVES: Record<Species, string[]> = {
+  oak: GREEN,
+  lushOak: GREEN,
+  willow: ["#3f7d36", "#55a04a", "#6fbe5c", "#93d77a", "#b9e89a"],
+  acacia: ["#3b6b2a", "#4f8a36", "#6aa646", "#8ec25c", "#b3d67a"],
+  birch: ["#5f8f2e", "#7aa83a", "#98c24a", "#bcd96a", "#dcef9a"],
+  cherry: GREEN,
+};
+const SEASON_LEAVES: Record<Season, string[] | null> = {
+  SUMMER: null, // per species, see SPECIES_LEAVES
+  SPRING: ["#b04a76", "#d86a96", "#f08cb2", "#ffb0cc", "#ffd6e6"],
+  AUTUMN: ["#7a2c18", "#a8401e", "#d2622a", "#ec8a36", "#f7b04a", "#ffd37a"],
+  WINTER: ["#c9d8ea", "#dfe8f3", "#eef4fc", "#f7faff", "#ffffff"], // pale ramp: not in the mockup, chosen here
+};
+
+// Colours for a tree's leaves, specks, bark and snow for the season. A leaf override recolours every season but winter.
+export function treeColours(season: Season, species: Species, leafOverride: string | null): TreeColours {
+  const birch = species === "birch", cherry = species === "cherry";
+  const leaves = leafOverride && season !== "WINTER"
+    ? [0.1, 0.3, 0.5, 0.7, 0.9].map((shade) => leafShade(leafOverride, shade, false))
+    : SEASON_LEAVES[season] ?? SPECIES_LEAVES[species];
+  return {
+    leaves,
+    speck: season === "SPRING" ? "#ffffff" : season === "SUMMER" && species === "lushOak" ? "#ecf27a" : null,
+    bark: birch ? "#e8e4dc" : cherry ? "#4a2f2a" : "#5a3b2e",
+    twig: birch ? "#8a7f74" : "#4a2f24",
+    barkMarks: birch ? "#2a2420" : null,
+    leafKeep: season === "WINTER" ? 0.08 : season === "AUTUMN" ? 0.6 : 1,
+    snowCap: season === "WINTER" ? "#f4f8ff" : null,
+  };
 }
