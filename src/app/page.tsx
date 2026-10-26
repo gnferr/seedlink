@@ -235,7 +235,7 @@ export default function Home() {
 
   return (
     <main ref={mainRef} className="relative flex min-h-0 flex-1 overflow-hidden bg-[rgb(16_14_38)]">
-      <h1 className="sr-only">Sky Island</h1>
+      <h1 className="sr-only">Seedlink</h1>
       {/* Overlays stay siblings of role="img": its children are pruned from the accessibility tree. */}
       <div role="img" aria-label={`A floating island whose tree folds into the QR code for "${qr.text}".`} data-phase={phase} data-species={treeInfo?.species} data-tree-seed={treeInfo?.seed} className="absolute inset-0">
         {/* Mount once the controls are measured, so the first fit already leaves room for them. */}

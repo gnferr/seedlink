@@ -4,7 +4,7 @@
   --background: #ffffff;
   --foreground: #171717;
   --ring: #ffd27a;
-  /* Sky Island controls: night ink glass, moon-cream selection, leaf-green Save, firefly-gold focus. */
+  /* Seedlink controls: night ink glass, moon-cream selection, leaf-green Save, firefly-gold focus. */
   --ink: 28 26 58;
   --ink-deep: 16 14 38;
   --dusk: 139 127 184;
@@ -242,7 +242,7 @@ select {
   border-color: var(--hud-ink);
 }
 
-/* ---------- Sky Island: pixel-stepped dithered glass (spike take 2) ---------- */
+/* ---------- Seedlink: pixel-stepped dithered glass (spike take 2) ---------- */
 .ui {
   position: absolute;
   left: 0;
