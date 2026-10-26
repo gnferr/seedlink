@@ -162,7 +162,7 @@ export default function Home() {
     canvas.width = img.width;
     canvas.height = img.height;
     canvas.getContext("2d")?.putImageData(new ImageData(img.data, img.width, img.height), 0, 0);
-    exportPng(canvas, "sky-island-qr.png");
+    exportPng(canvas, "seedlink-qr.png");
   };
 
   const onCanvasReady = useCallback((c: HTMLCanvasElement) => {

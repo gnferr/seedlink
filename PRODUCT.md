@@ -46,7 +46,7 @@ Built and working:
 - The fold: tapping the tree (or its keyboard button) moves each tree block onto a dark module, eases the camera to straight top-down, stills the island, and leaves a flat code. Tapping again grows the tree back.
 - Four seasons and a leaf colour, a pixel-art night sky per season, and small effects (fireflies, petals, leaves or snow, a waterfall) that run only while the tree stands.
 - An in-app scannability check on the folded, settled frame. Save is disabled, with a stated reason, unless the check passed for the current link, season and colour.
-- PNG export: a plain QR image drawn from the code, dark ink on white with the quiet zone (`sky-island-qr.png`), self-checked before download.
+- PNG export: a plain QR image drawn from the code, dark ink on white with the quiet zone (`seedlink-qr.png`), self-checked before download.
 
 Not built yet:
 
