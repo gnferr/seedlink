@@ -564,7 +564,6 @@ test("at 390x844 the whole crown fits the viewport width for several species", a
     await expect(scene(page)).toHaveAttribute("data-crown-px", /\d/);
     const crown = Number(await attr(page, "data-crown-px"));
     expect(crown, `${species} (seed ${seed}) crown px`).toBeLessThanOrEqual(390);
-    if (seed === 1) await page.screenshot({ path: "E:/lock-in-mode/project/01_web_base/01_interactive_qr_generator/.superpowers/sdd/2026-10-27-fixed-scale-plain-export/final-phone.png" });
     await ctx.close();
   }
   console.log("species covered:", [...seen].join(","));
