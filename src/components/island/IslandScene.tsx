@@ -29,7 +29,39 @@ export type IslandSceneProps = {
   onTap(action: "fold" | "grow" | "poke"): void;
   onCanvasReady(canvas: HTMLCanvasElement): void;
   onTree(species: Species, seed: number): void; // a new random tree began growing
+  onExportReady(render: () => HTMLCanvasElement): void; // render() draws the current view on the plain backdrop
 };
+
+const BACKDROP = new THREE.Color("#ece8f2");
+
+/** Registers the Save render: one frame without the sky (objects tagged userData.sky) on the plain backdrop, copied out. */
+function Exporter({ onExportReady }: { onExportReady: IslandSceneProps["onExportReady"] }) {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  const camera = useThree((s) => s.camera);
+  useEffect(() => {
+    onExportReady(() => {
+      const hidden: THREE.Object3D[] = [];
+      scene.traverse((o) => {
+        if (o.userData.sky && o.visible) hidden.push(o);
+      });
+      const background = scene.background;
+      hidden.forEach((o) => (o.visible = false));
+      scene.background = BACKDROP;
+      gl.render(scene, camera);
+      const src = gl.domElement;
+      const copy = document.createElement("canvas");
+      copy.width = src.width;
+      copy.height = src.height;
+      copy.getContext("2d")?.drawImage(src, 0, 0);
+      scene.background = background;
+      hidden.forEach((o) => (o.visible = true));
+      gl.render(scene, camera); // the preserved buffer shows the sky again before the next frame
+      return copy;
+    });
+  }, [gl, scene, camera, onExportReady]);
+  return null;
+}
 
 /** Shared per-frame fold state: `t` drives the blocks, `cam` the camera tween (both 0 = tree, 1 = folded). */
 export type FoldState = { t: number; cam: number; poke: number };
@@ -139,7 +171,7 @@ const draw = (previous: Species | null, matrix: QrMatrix, folded: boolean): Grow
   ({ matrix, folded, species: pickSpecies(previous, Math.random()), seed: Math.floor(Math.random() * 2 ** 31) });
 
 export default function IslandScene(props: IslandSceneProps) {
-  const { text, matrix, season, leaf, time, folded, reducedMotion, insets, onPhase, onTap, onCanvasReady, onTree } = props;
+  const { text, matrix, season, leaf, time, folded, reducedMotion, insets, onPhase, onTap, onCanvasReady, onTree, onExportReady } = props;
   const [phase, setPhase] = useState<FoldPhase>(folded ? "folded" : "tree");
   const fold = useRef<FoldState>({ t: folded ? 1 : 0, cam: folded ? 1 : 0, poke: 0 });
   // The poke shake is the scene's; sound and everything else is the page's call.
@@ -190,6 +222,7 @@ export default function IslandScene(props: IslandSceneProps) {
         <TreeMesh tree={tree} pieces={foldPlan.pieces} plan={foldPlan.plan} dark={dark} season={season} leaf={leaf} fold={fold} reducedMotion={reducedMotion} groupRef={treeRef} />
         {!reducedMotion && phase !== "folded" && <Particles tree={tree} season={season} fold={fold} />}
       </group>
+      <Exporter onExportReady={onExportReady} />
       <Taps phase={phase} tree={treeRef} ground={groundRef} onTap={tap} />
     </Canvas>
   );

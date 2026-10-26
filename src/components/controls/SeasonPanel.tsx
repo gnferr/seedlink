@@ -3,14 +3,17 @@ import type { Season } from "@/lib/seasons";
 import { LEAF_SWATCHES } from "@/lib/palette";
 import { nextRadioIndex } from "@/lib/radioNav";
 import PixelIcon from "./PixelIcon";
+import TimeSlider from "./TimeSlider";
 
 export const SEASON_ORDER: readonly Season[] = ["SPRING", "SUMMER", "AUTUMN", "WINTER"];
 export const SEASON_LABEL: Record<Season, string> = { SPRING: "Spring", SUMMER: "Summer", AUTUMN: "Autumn", WINTER: "Winter" };
 export const seasonIcon = (s: Season) => s.toLowerCase() as "spring" | "summer" | "autumn" | "winter";
 
-export default function SeasonPanel({ season, onSeason, leaf, onLeaf, soundOn, onSound }: {
+export default function SeasonPanel({ season, onSeason, time, onTime, leaf, onLeaf, soundOn, onSound }: {
   season: Season;
   onSeason(s: Season): void;
+  time: number;
+  onTime(t: number): void;
   leaf: string; // the leaf colour on screen: the override or the season's own
   onLeaf(hex: string): void;
   soundOn: boolean;
@@ -49,6 +52,7 @@ export default function SeasonPanel({ season, onSeason, leaf, onLeaf, soundOn, o
           );
         })}
       </div>
+      <TimeSlider value={time} onChange={onTime} />
       <div className="row">
         <div className="swatches well step">
           {LEAF_SWATCHES.map(({ name, hex }) => (

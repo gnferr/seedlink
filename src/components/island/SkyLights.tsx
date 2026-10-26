@@ -115,7 +115,7 @@ export default function SkyLights({ time, fold, radius, reducedMotion }: {
       <hemisphereLight ref={hemi} args={[SKY, GROUND, HEMI]} />
       <directionalLight ref={key} color={KEY} intensity={KEY_I} position={KEY_POS} />
       <directionalLight color={FILL} intensity={FILL_I} position={FILL_POS} />
-      <sprite ref={glow}>
+      <sprite ref={glow} userData={{ sky: true }}>
         <spriteMaterial map={texture} transparent depthWrite={false} fog={false} blending={THREE.AdditiveBlending} />
       </sprite>
     </>

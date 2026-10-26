@@ -123,7 +123,7 @@ export default function SkyDome({ time }: { time: number }) {
   });
 
   return (
-    <mesh ref={mesh} frustumCulled={false} renderOrder={-1} material={material}>
+    <mesh ref={mesh} userData={{ sky: true }} frustumCulled={false} renderOrder={-1} material={material}>
       <planeGeometry args={[2, 2]} />
     </mesh>
   );

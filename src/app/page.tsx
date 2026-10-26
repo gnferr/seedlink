@@ -11,7 +11,7 @@ import { exportPng } from "@/lib/exporters";
 import { useReducedMotion } from "@/lib/useReducedMotion";
 import type { Season } from "@/lib/seasons";
 import { PALETTES } from "@/lib/palette";
-import { sampleScan } from "@/lib/sampleScan";
+import { bufferScale, sampleScan } from "@/lib/sampleScan";
 import type { Separation } from "@/lib/verify";
 import { frameKey, nextScanFrame, NO_INSETS, tooSmallToScan, type ScanFrame } from "@/lib/scanFit";
 import { hintAction, hintText, saveBlockedReason, type FoldPhase, type StatusInput } from "@/lib/status";
@@ -52,13 +52,13 @@ export default function Home() {
   const [tooLong, setTooLong] = useState(false);
   const [season, setSeasonState] = useState<Season>("SUMMER");
   const [leaf, setLeaf] = useState<string | null>(null);
-  // shortcut: local time fixed at mount; Task 8 adds the slider. Read only in the browser: the server prerender
-  // must not read the clock, and the value only reaches the client-only scene, so hydration cannot mismatch.
-  const [time] = useState(() => {
-    if (typeof window === "undefined") return 0;
+  // Starts at the visitor's local time, read on mount: the server prerender must not read the clock.
+  const [time, setTime] = useState(0.35);
+  useEffect(() => {
     const d = new Date();
-    return timeFromClock(d.getHours(), d.getMinutes());
-  });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one read of the clock after hydration, never again
+    setTime(timeFromClock(d.getHours(), d.getMinutes()));
+  }, []);
   const [folded, setFolded] = useState(false);
   const [phase, setPhase] = useState<FoldPhase>("tree");
   // `frame` is the framing the check was graded under; it is not part of verifyKey.
@@ -138,7 +138,7 @@ export default function Home() {
   if (nextFrame !== frame) setFrame(nextFrame);
   const currentFrame = frameKey(frame);
 
-  const verifyKey = JSON.stringify([qr.text, season, leaf]);
+  const verifyKey = JSON.stringify([qr.text, season, leaf, time]);
   // Recomputed from the current fit, so it clears when the window grows or the link shortens.
   const tooSmall =
     phase === "folded" && frame.width > 0 && tooSmallToScan(frame.width, frame.height, qr.matrix.size + 2 * QUIET_ZONE, frame.insets);
@@ -151,6 +151,18 @@ export default function Home() {
     }, DEBOUNCE_MS);
     return () => clearTimeout(id);
   }, [phase, tooSmall, verifyKey, currentFrame, frame.insets, qr.matrix, glEpoch]);
+
+  const exportRef = useRef<(() => HTMLCanvasElement) | null>(null);
+  const onExportReady = useCallback((render: () => HTMLCanvasElement) => { exportRef.current = render; }, []);
+  // The file is a fresh render on the plain backdrop, so it is checked again at the on-screen module centres.
+  const saveImage = () => {
+    const canvas = canvasRef.current, render = exportRef.current;
+    if (!canvas || !render) return;
+    const copy = render();
+    const separation = sampleScan(copy, qr.matrix, frame.insets, bufferScale(canvas.height, canvas.clientHeight));
+    if (separation.separated) exportPng(copy, "sky-island-qr.png");
+    else setScan({ key: verifyKey, frame: currentFrame, separation }); // Save now says why it won't scan
+  };
 
   const onCanvasReady = useCallback((c: HTMLCanvasElement) => {
     canvasRef.current = c;
@@ -242,6 +254,7 @@ export default function Home() {
               onTap={onTap}
               onCanvasReady={onCanvasReady}
               onTree={onTree}
+              onExportReady={onExportReady}
             />
           </SceneBoundary>
         )}
@@ -254,6 +267,8 @@ export default function Home() {
             <SeasonPanel
               season={season}
               onSeason={setSeason}
+              time={time}
+              onTime={setTime}
               leaf={leaf ?? PALETTES[season].leaf}
               onLeaf={setLeaf}
               soundOn={soundOn}
@@ -275,7 +290,7 @@ export default function Home() {
             onTogglePanel={() => setPanelOpen((o) => !o)}
             seasonButtonRef={seasonButtonRef}
             saveBlocked={blocked}
-            onSave={() => canvasRef.current && exportPng(canvasRef.current, "sky-island-qr.png")}
+            onSave={saveImage}
           />
         </div>
       </div>

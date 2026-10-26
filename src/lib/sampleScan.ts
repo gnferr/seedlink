@@ -36,13 +36,21 @@ export function sampleBuffer(
   return classifySeparation(dark, light);
 }
 
+/** Drawing-buffer pixels per CSS pixel; an off-DOM canvas (no layout height) counts as 1. */
+export const bufferScale = (bufferHeight: number, cssHeight: number) => (cssHeight > 0 ? bufferHeight / cssHeight : 1);
+
 /**
  * Reads the rendered SCAN view (needs preserveDrawingBuffer) and checks dark/light modules separate.
- * `insets` are CSS pixels, as the camera framed them; they are scaled to drawing-buffer pixels here.
+ * `insets` are CSS pixels, as the camera framed them; `k` scales them to drawing-buffer pixels. Pass the
+ * on-screen canvas's scale when sampling an off-DOM copy of it.
  */
-export function sampleScan(canvas: HTMLCanvasElement, matrix: QrMatrix, insets: ScanInsets = NO_INSETS): Separation {
+export function sampleScan(
+  canvas: HTMLCanvasElement,
+  matrix: QrMatrix,
+  insets: ScanInsets = NO_INSETS,
+  k = bufferScale(canvas.height, canvas.clientHeight),
+): Separation {
   const { width, height } = canvas; // drawing-buffer pixels, not CSS pixels
-  const k = canvas.clientHeight > 0 ? height / canvas.clientHeight : 1;
   const scaled = { top: insets.top * k, bottom: insets.bottom * k };
   const copy = document.createElement("canvas");
   copy.width = width;

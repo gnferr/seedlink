@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateMatrix, QUIET_ZONE, type QrMatrix } from "./qr.ts";
-import { sampleBuffer, scanPitch } from "./sampleScan.ts";
+import { bufferScale, sampleBuffer, scanPitch } from "./sampleScan.ts";
 import { FIT_MARGIN, scanFit, type ScanInsets } from "./scanFit.ts";
 
 const W = 600;
@@ -78,4 +78,14 @@ test("one wrong module is caught", () => {
 test("a transposed render is detected as broken", () => {
   const s = run(paint(m, (x, z) => at(z, x)));
   assert.ok(!s.separated || s.matched < s.total);
+});
+
+test("buffer scale maps CSS insets to buffer pixels, and an off-DOM copy needs it passed", () => {
+  assert.equal(bufferScale(1000, 500), 2);
+  // An off-DOM canvas has no layout height: it would be read at 1, which frames a 2x buffer wrongly.
+  assert.equal(bufferScale(1000, 0), 1);
+  const insets = { top: 0, bottom: 70 };
+  const k = bufferScale(H, H / 2);
+  const scaled = { top: insets.top * k, bottom: insets.bottom * k };
+  assert.equal(run(paint(m, at, scaled), scaled).matched, m.size * m.size);
 });
