@@ -542,3 +542,32 @@ test("no seam between horizontally adjacent dark modules in the folded frame", a
   expect(Math.abs(seam - a), `lumas ${lumas}`).toBeLessThanOrEqual(10);
   expect(Math.abs(seam - b), `lumas ${lumas}`).toBeLessThanOrEqual(10);
 });
+
+test("at 390x844 the whole crown fits the viewport width for several species", async ({ browser }) => {
+  const seen = new Set<string>();
+  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    await page.addInitScript((s) => {
+      let a = s; // mulberry32, picks the species and seed
+      Math.random = () => {
+        a = (a + 0x6d2b79f5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }, seed);
+    await ready(page);
+    await expect(scene(page)).toHaveAttribute("data-phase", "tree", { timeout: 20_000 });
+    const species = (await attr(page, "data-species"))!;
+    seen.add(species);
+    await expect(scene(page)).toHaveAttribute("data-crown-px", /\d/);
+    const crown = Number(await attr(page, "data-crown-px"));
+    expect(crown, `${species} (seed ${seed}) crown px`).toBeLessThanOrEqual(390);
+    if (seed === 1) await page.screenshot({ path: "E:/lock-in-mode/project/01_web_base/01_interactive_qr_generator/.superpowers/sdd/2026-10-27-fixed-scale-plain-export/final-phone.png" });
+    await ctx.close();
+  }
+  console.log("species covered:", [...seen].join(","));
+  expect(seen.size).toBeGreaterThanOrEqual(3);
+  expect([...seen]).toEqual(expect.arrayContaining(["oak", "willow"]));
+});
