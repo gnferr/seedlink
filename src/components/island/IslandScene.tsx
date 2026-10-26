@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { easeInOutCubic, FOLD_SECONDS, foldPieces, planFold } from "@/lib/fold";
+import { timeFromClock } from "@/lib/daycycle";
 import { growIsland } from "@/lib/island";
 import { isTap, nextFoldTarget } from "@/lib/pointer";
 import { darkModules, type QrMatrix } from "@/lib/qr";
@@ -15,7 +16,7 @@ import { growTree, pickSpecies, type Species } from "@/lib/tree";
 import FoldCamera from "./FoldCamera";
 import IslandMesh from "./IslandMesh";
 import Particles from "./Particles";
-import SkyBackground from "./SkyBackground";
+import SkyDome from "./SkyDome";
 import TreeMesh from "./TreeMesh";
 
 export type IslandSceneProps = {
@@ -168,6 +169,8 @@ export default function IslandScene(props: IslandSceneProps) {
   const bobRef = useRef<THREE.Group>(null);
   // Chunky half-resolution pixels for the tree; the folded code renders at the full device ratio.
   const ratio = Math.min(2, window.devicePixelRatio || 1);
+  // shortcut: local time fixed at mount until Task 7 adds the time prop and slider.
+  const [time] = useState(() => { const d = new Date(); return timeFromClock(d.getHours(), d.getMinutes()); });
 
   return (
     <Canvas
@@ -179,7 +182,7 @@ export default function IslandScene(props: IslandSceneProps) {
         onCanvasReady(gl.domElement);
       }}
     >
-      <SkyBackground season={season} />
+      <SkyDome time={time} />
       <hemisphereLight args={["#b8b0ff", "#2a2140", 1.1]} />
       <directionalLight color="#fff4e0" intensity={1.6} position={[30, 50, -10]} />
       <directionalLight color="#9ec5ff" intensity={0.5} position={[-30, 20, 30]} />

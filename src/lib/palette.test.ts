@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { INK, PAD, PALETTES, LEAF_SWATCHES, leafShade, treeColours } from "./palette.ts";
 import { relativeLuminance, contrastRatio, MIN_SCAN_CONTRAST } from "./verify.ts";
-import { skyRamp, SKY_STEPS } from "./sky.ts";
 import type { Season } from "./seasons.ts";
 import type { Species } from "./tree.ts";
 
@@ -21,15 +20,6 @@ test("leaf swatches are 8 unique", () => {
   assert.equal(LEAF_SWATCHES.length, 8);
   assert.equal(new Set(LEAF_SWATCHES.map((w) => w.name)).size, 8);
   assert.equal(new Set(LEAF_SWATCHES.map((w) => w.hex)).size, 8);
-});
-
-test("sky ramps strictly brighten", () => {
-  for (const s of seasons) {
-    const ramp = skyRamp(PALETTES[s].sky);
-    assert.equal(ramp.length, SKY_STEPS);
-    const l = ramp.map(([r, g, b]) => relativeLuminance(r, g, b));
-    for (let i = 1; i < l.length; i++) assert.ok(l[i] > l[i - 1], `${s} step ${i}`);
-  }
 });
 
 test("leafShade returns hex, lighter when sunlit or high shade", () => {
