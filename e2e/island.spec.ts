@@ -55,7 +55,7 @@ test("keyboard fold reaches the verdict and Save downloads the PNG", async ({ pa
   await expect(chip(page)).toHaveText(VERDICT, { timeout: 20_000 });
   await enabled(page);
   const [dl] = await Promise.all([page.waitForEvent("download"), save(page).click()]);
-  expect(dl.suggestedFilename()).toBe("sky-island-qr.png");
+  expect(dl.suggestedFilename()).toBe("seedlink-qr.png");
 });
 
 // The saved file is drawn from the matrix: (size + 8) * 16 px square, ink on white, one 16 px square per module.

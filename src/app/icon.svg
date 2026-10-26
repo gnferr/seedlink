@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- Night-ink tile with stepped corners, a pixel tree on a floating island. -->
+  <path fill="#1c1a3a" d="M2 0h12v1h1v1h1v12h-1v1h-1v1H2v-1H1v-1H0V2h1V1h1z"/>
+  <path fill="#3f8a45" d="M5 2h6v1h2v4h-1v1H4V7H3V3h2z"/>
+  <path fill="#5fb35a" d="M6 3h4v1h2v2h-1v1H5V6H4V4h2z"/>
+  <path fill="#9fd88a" d="M6 4h2v1H6zM9 3h1v1H9z"/>
+  <path fill="#6b4a2f" d="M7 8h2v3H7z"/>
+  <path fill="#5fb35a" d="M3 11h10v1H3z"/>
+  <path fill="#8b6a4a" d="M4 12h8v1H4zM6 13h4v1H6z"/>
+  <path fill="#f3ecd2" d="M12 1h1v1h-1z"/>
+</svg>
