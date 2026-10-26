@@ -12,7 +12,7 @@ import { hashString } from "@/lib/rng";
 import type { ScanInsets } from "@/lib/scanFit";
 import type { Season } from "@/lib/seasons";
 import type { FoldPhase } from "@/lib/status";
-import { growTree, pickSpecies, type Species } from "@/lib/tree";
+import { fitTree, growTree, pickSpecies, type Species } from "@/lib/tree";
 import FoldCamera from "./FoldCamera";
 import IslandMesh from "./IslandMesh";
 import Particles from "./Particles";
@@ -195,7 +195,7 @@ export default function IslandScene(props: IslandSceneProps) {
   const pitch = modulePitch(matrix.size);
   const dark = useMemo(() => darkModules(matrix, pitch), [matrix, pitch]);
   const island = useMemo(() => growIsland(hashString(text), REF_SIZE), [text]);
-  const tree = useMemo(() => growTree(species, treeSeed, matrix.size), [species, treeSeed, matrix.size]);
+  const tree = useMemo(() => fitTree(growTree(species, treeSeed, REF_SIZE), island.radius), [species, treeSeed, island.radius]);
   // The season's leafKeep changes the carriers (only shown leaves carry; winter cards never) but never the tree.
   const leafKeep = treeColours(season, species, null).leafKeep;
   const foldPlan = useMemo(() => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CARD_BUDGET, growTree, pickSpecies, SEGMENT_BUDGET, SPECIES, type Species } from "./tree.ts";
+import { CARD_BUDGET, fitTree, growTree, pickSpecies, SEGMENT_BUDGET, SPECIES, type Species } from "./tree.ts";
 
 test("six species", () => {
   assert.deepEqual([...SPECIES].sort(), ["acacia", "birch", "cherry", "lushOak", "oak", "willow"]);
@@ -65,3 +65,16 @@ test("pickSpecies never repeats and is even", () => {
   for (let i = 0; i < 1000; i++) all.add(pickSpecies(null, i / 1000));
   assert.equal(all.size, 6);
 });
+
+for (const s of SPECIES) {
+  test(`${s}: fitTree sizes the crown to the island, purely`, () => {
+    for (const seed of [1, 7, 42]) {
+      const t = growTree(s, seed, 25), before = structuredClone(t), f = fitTree(t, 30);
+      assert.ok(Math.abs(f.crownRadius - (s === "birch" ? 1.1 : 1.5) * 30) < 1e-6);
+      assert.equal(f.cards.length, t.cards.length);
+      assert.equal(f.segments.length, t.segments.length);
+      assert.deepEqual(t, before);
+      assert.equal(f.segments[0].y0, 0);
+    }
+  });
+}
