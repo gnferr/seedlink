@@ -4,7 +4,7 @@ import type { Tree } from "./tree.ts";
 
 export const FOLD_SECONDS = 1.8;
 export const FLIGHT = 0.45; // fraction of the timeline one voxel spends flying
-export const MODULE_BLOCK = { y: 0.3, width: 0.98, height: 0.6 }; // a folded module block
+export const MODULE_BLOCK = { y: 0.3, height: 0.6 }; // a folded module block, pitch wide
 
 export type FoldPlan = {
   carrier: Int32Array; // per piece: index into dark modules, or -1
@@ -14,6 +14,7 @@ export type FoldPlan = {
   arc: Float32Array;
   spin: Float32Array;
   scatter: Float32Array; // x,z pairs where non-carriers shrink to, inside the slab
+  pitch: number; // module width in world units
 };
 export type Pose = { x: number; y: number; z: number; sx: number; sy: number; sz: number; rotY: number; ink: number };
 
@@ -35,7 +36,7 @@ export function foldPieces(tree: Tree, leafKeep: number): FoldPiece[] {
   return [...cards, ...segs];
 }
 
-export function planFold(pieces: FoldPiece[], top: number, dark: DarkModule[], seed: number): FoldPlan {
+export function planFold(pieces: FoldPiece[], top: number, dark: DarkModule[], seed: number, pitch: number): FoldPlan {
   const n = pieces.length;
   const carrier = new Int32Array(n).fill(-1), owner = new Int32Array(dark.length).fill(-1);
   // cards before segments, each group shuffled
@@ -57,7 +58,7 @@ export function planFold(pieces: FoldPiece[], top: number, dark: DarkModule[], s
     scatter[i * 2] = (hash3(i, 1, 2, seed) - 0.5) * 2 * rx;
     scatter[i * 2 + 1] = (hash3(i, 2, 1, seed) - 0.5) * 2 * rz;
   });
-  return { carrier, owner, extras, delay, arc, spin, scatter };
+  return { carrier, owner, extras, delay, arc, spin, scatter, pitch };
 }
 
 // The old voxel flight path; returns raw local progress, which drives the 0.7-1 swap between piece and ink block.
@@ -83,18 +84,18 @@ export function piecePose(plan: FoldPlan, pieces: FoldPiece[], dark: DarkModule[
 
 export function inkPose(plan: FoldPlan, pieces: FoldPiece[], dark: DarkModule[], j: number, t: number, out: Pose): Pose {
   const i = plan.owner[j];
-  if (i < 0) return extraPose(dark[j], t, out);
+  if (i < 0) return extraPose(dark[j], t, out, plan.pitch);
   const k = swap(fly(plan, pieces, dark, i, t, out));
-  out.sx = out.sz = MODULE_BLOCK.width * k;
+  out.sx = out.sz = plan.pitch * k;
   out.sy = MODULE_BLOCK.height * k;
   out.ink = 1;
   return out;
 }
 
-export function extraPose(module: DarkModule, t: number, out: Pose): Pose {
+export function extraPose(module: DarkModule, t: number, out: Pose, pitch: number): Pose {
   const k = easeInOutCubic(clamp01((t - 0.5) / 0.5));
   out.x = module.x; out.y = MODULE_BLOCK.y * k; out.z = module.z;
-  out.sx = out.sz = MODULE_BLOCK.width * k;
+  out.sx = out.sz = pitch * k;
   out.sy = MODULE_BLOCK.height * k;
   out.rotY = 0; out.ink = 1;
   return out;

@@ -6,7 +6,7 @@ import { OrbitControls, OrthographicCamera } from "@react-three/drei";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { easeInOutCubic } from "@/lib/fold";
-import { QUIET_ZONE } from "@/lib/qr";
+import { modulePitch, QUIET_ZONE } from "@/lib/qr";
 import { scanFit, type ScanInsets } from "@/lib/scanFit";
 import type { FoldState } from "./IslandScene";
 
@@ -35,9 +35,11 @@ export function treePose(width: number, height: number, radius: number, top: num
 /**
  * The top-down scan pose: straight down at the slab, screen up = −z, right = +x, `zoom` px per module,
  * and the pad centre (world origin) `dy` px below the view centre, the framing `sampleScan` assumes.
+ * A module is `modulePitch(size)` units wide, so the zoom is divided by it to keep `fit.zoom` px per module.
  */
 export function topPose(width: number, height: number, size: number, insets: ScanInsets): Shot {
-  const { zoom, dy } = scanFit(width, height, size + 2 * QUIET_ZONE, insets);
+  const fit = scanFit(width, height, size + 2 * QUIET_ZONE, insets);
+  const zoom = fit.zoom / modulePitch(size), dy = fit.dy;
   const target = new THREE.Vector3(0, 0, -dy / zoom);
   return { zoom, target, position: target.clone().setY(DISTANCE), up: UP_TOP };
 }

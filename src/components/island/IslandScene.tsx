@@ -7,7 +7,7 @@ import { easeInOutCubic, FOLD_SECONDS, foldPieces, planFold } from "@/lib/fold";
 import { growIsland } from "@/lib/island";
 import { treeColours } from "@/lib/palette";
 import { isTap, nextFoldTarget } from "@/lib/pointer";
-import { darkModules, type QrMatrix } from "@/lib/qr";
+import { darkModules, modulePitch, REF_SIZE, type QrMatrix } from "@/lib/qr";
 import { hashString } from "@/lib/rng";
 import type { ScanInsets } from "@/lib/scanFit";
 import type { Season } from "@/lib/seasons";
@@ -191,15 +191,17 @@ export default function IslandScene(props: IslandSceneProps) {
   const { species, seed: treeSeed } = grow;
   useEffect(() => onTree(species, treeSeed), [species, treeSeed, onTree]);
 
-  const dark = useMemo(() => darkModules(matrix), [matrix]);
-  const island = useMemo(() => growIsland(hashString(text), matrix.size), [text, matrix.size]);
+  // The world is fixed at REF_SIZE; a longer link gets more, smaller modules on the same slab.
+  const pitch = modulePitch(matrix.size);
+  const dark = useMemo(() => darkModules(matrix, pitch), [matrix, pitch]);
+  const island = useMemo(() => growIsland(hashString(text), REF_SIZE), [text]);
   const tree = useMemo(() => growTree(species, treeSeed, matrix.size), [species, treeSeed, matrix.size]);
   // The season's leafKeep changes the carriers (only shown leaves carry; winter cards never) but never the tree.
   const leafKeep = treeColours(season, species, null).leafKeep;
   const foldPlan = useMemo(() => {
     const pieces = foldPieces(tree, leafKeep);
-    return { pieces, plan: planFold(pieces, tree.top, dark, treeSeed) };
-  }, [tree, leafKeep, dark, treeSeed]);
+    return { pieces, plan: planFold(pieces, tree.top, dark, treeSeed, pitch) };
+  }, [tree, leafKeep, dark, treeSeed, pitch]);
 
   const treeRef = useRef<THREE.Group>(null);
   const groundRef = useRef<THREE.Group>(null);
@@ -222,7 +224,7 @@ export default function IslandScene(props: IslandSceneProps) {
       <Timeline foldRef={fold} folded={folded} reducedMotion={reducedMotion} world={tree} bobRef={bobRef} ratio={ratio} setPhase={setPhase} onPhase={onPhase} />
       <FoldCamera radius={island.radius} top={tree.top} size={matrix.size} insets={insets} fold={fold} orbit={phase === "tree"} />
       <group ref={bobRef}>
-        <IslandMesh island={island} dark={dark} size={matrix.size} season={season} fold={fold} reducedMotion={reducedMotion} groupRef={groundRef} />
+        <IslandMesh island={island} dark={dark} size={matrix.size} pitch={pitch} season={season} fold={fold} reducedMotion={reducedMotion} groupRef={groundRef} />
         <TreeMesh tree={tree} pieces={foldPlan.pieces} plan={foldPlan.plan} dark={dark} season={season} leaf={leaf} fold={fold} reducedMotion={reducedMotion} groupRef={treeRef} />
         {!reducedMotion && phase !== "folded" && <Particles tree={tree} season={season} fold={fold} />}
       </group>

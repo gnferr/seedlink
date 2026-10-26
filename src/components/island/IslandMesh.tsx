@@ -13,7 +13,7 @@ import type { FoldState } from "./IslandScene";
 const dummy = new THREE.Object3D();
 const colour = new THREE.Color();
 const stone = new THREE.Color();
-const TILE = { width: 0.98, height: 0.2, y: 0.1 };
+const TILE = { height: 0.2, y: 0.1 }; // a full pitch wide, so neighbouring dark tiles join
 const FLOWERS = ["#f4e27a", "#ffb0cc", "#ffffff"];
 const WATER = ["#b6e2ff", "#7cc4ff", "#7cc4ff"];
 const ink = new THREE.Color(INK);
@@ -61,6 +61,7 @@ export default function IslandMesh({
   island,
   dark,
   size,
+  pitch,
   season,
   fold,
   reducedMotion,
@@ -68,7 +69,10 @@ export default function IslandMesh({
 }: {
   island: Island;
   dark: DarkModule[];
+  /** Module count, for finder lookup. */
   size: number;
+  /** Module width in world units. */
+  pitch: number;
   season: Season;
   fold: RefObject<FoldState>;
   reducedMotion: boolean;
@@ -136,8 +140,8 @@ export default function IslandMesh({
         <meshLambertMaterial />
       </instancedMesh>
       {dark.length > 0 && (
-        <instancedMesh key={`t${dark.length}`} ref={tiles} args={[undefined, undefined, dark.length]}>
-          <boxGeometry args={[TILE.width, TILE.height, TILE.width]} />
+        <instancedMesh key={`t${dark.length}|${pitch}`} ref={tiles} args={[undefined, undefined, dark.length]}>
+          <boxGeometry args={[pitch, TILE.height, pitch]} />
           <meshLambertMaterial />
         </instancedMesh>
       )}

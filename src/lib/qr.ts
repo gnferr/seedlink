@@ -2,6 +2,14 @@ import QRCode from "qrcode";
 
 /** 4-module quiet zone, required by the QR spec for scanners to lock on. */
 export const QUIET_ZONE = 4;
+/** The world is built as if every code were this many modules wide; other sizes shrink the module pitch. */
+export const REF_SIZE = 25;
+export const SLAB_UNITS = REF_SIZE + 2 * QUIET_ZONE;
+
+/** World units per module, so code plus quiet zone always spans SLAB_UNITS. */
+export function modulePitch(size: number): number {
+  return SLAB_UNITS / (size + 2 * QUIET_ZONE);
+}
 
 export type QrMatrix = {
   /** Row-major 0/1 grid, size x size. 1 = dark module. */
@@ -19,14 +27,14 @@ export function isFinder(x: number, z: number, size: number): boolean {
 /** A dark module with its grid position and its slab-centred world position (x, z). */
 export type DarkModule = { col: number; row: number; x: number; z: number };
 
-/** Every dark module, row-major, centred on the slab so (0, 0) is the middle. */
-export function darkModules(m: QrMatrix): DarkModule[] {
+/** Every dark module, row-major, centred on the slab so (0, 0) is the middle, `pitch` units apart. */
+export function darkModules(m: QrMatrix, pitch = 1): DarkModule[] {
   const half = (m.size - 1) / 2;
   const out: DarkModule[] = [];
   for (let row = 0; row < m.size; row++) {
     for (let col = 0; col < m.size; col++) {
       if (m.cells[row * m.size + col] === 1) {
-        out.push({ col, row, x: col - half, z: row - half });
+        out.push({ col, row, x: (col - half) * pitch, z: (row - half) * pitch });
       }
     }
   }
