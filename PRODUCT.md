@@ -26,7 +26,7 @@ Success is a user leaving with an artifact they are happy to put in front of oth
 
 Two claims, both confirmed:
 
-- **A tree that becomes a code.** Other generators make a flat code you decorate around. This one grows a real voxel tree on a QR slab, and the tree's blocks fold down to become the code's dark modules (`system_document.md` v3.0.0, spec in `docs/superpowers/specs/2026-10-25-sky-island-design.md`). The "and it still scans" half is the product, not a caveat.
+- **A tree that becomes a code.** Other generators make a flat code you decorate around. This one grows a real voxel tree on a QR slab, and the tree's blocks fold down to become the code's dark modules (spec in `docs/superpowers/specs/2026-10-25-sky-island-design.md`). The "and it still scans" half is the product, not a caveat.
 - **A live 3D playground.** The canvas is the interface. Typing, switching seasons, poking the tree, and folding all happen against the island in real time rather than through a render-and-wait step.
 
 ## Operating Context
@@ -46,7 +46,7 @@ Built and working:
 - The fold: tapping the tree (or its keyboard button) moves each tree block onto a dark module, eases the camera to straight top-down, stills the island, and leaves a flat code. Tapping again grows the tree back.
 - Four seasons and a leaf colour, a pixel-art night sky per season, and small effects (fireflies, petals, leaves or snow, a waterfall) that run only while the tree stands.
 - An in-app scannability check on the folded, settled frame. Save is disabled, with a stated reason, unless the check passed for the current link, season and colour.
-- PNG export of the folded code (`sky-island-qr.png`).
+- PNG export: a plain QR image drawn from the code, dark ink on white with the quiet zone (`sky-island-qr.png`), self-checked before download.
 
 Not built yet:
 
@@ -67,11 +67,11 @@ Open and not yet decided: deploy target, and whether a user ever needs to return
 
 ## Brand Commitments
 
-None established beyond one owner-directed commitment: the visual identity is **Indie Voxel Game — chunky, tactile, playful; the object leads.** It is defined in `system_document.md` §1 and §5.5. There is still no name beyond the working title, no logo, and no committed voice. Future work may propose these; it must not describe them as pre-existing.
+None established beyond one owner-directed commitment: the visual identity is **Indie Voxel Game — chunky, tactile, playful; the object leads.** The product is named **Seedlink**. There is still no logo and no committed voice. Future work may propose these; it must not describe them as pre-existing.
 
 ## Evidence on Hand
 
-- `system_document.md` — the original product and technical requirements document that defines the five features, the generation pipeline, and the material constraints. It is the only authored source of product truth besides this file.
+- `docs/superpowers/specs/` — the design specs for the island, the fold, the tree species and the day cycle. They are the only authored source of product truth besides this file.
 - The running application itself.
 
 Nothing else exists. There are no users yet, no testimonials, no case studies, no press, no usage data, no benchmarks, and no customer logos. Future work must not invent any of these or imply adoption that has not happened.
