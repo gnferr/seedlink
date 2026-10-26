@@ -51,6 +51,7 @@ export default function FoldCamera({ radius, top, size, insets, fold, orbit }: {
   orbit: boolean;
 }) {
   const { width, height } = useThree((s) => s.size);
+  const gl = useThree((s) => s.gl);
   const camera = useRef<THREE.OrthographicCamera>(null);
   const controls = useRef<OrbitControlsImpl>(null);
   // The user's pose captured at fold start; the grow eases back to it.
@@ -92,6 +93,10 @@ export default function FoldCamera({ radius, top, size, insets, fold, orbit }: {
     fitted.current = pose.zoom;
   }
   useLayoutEffect(refit, [pose, fold]);
+  // The island's on-screen width (CSS px) in the fitted tree pose: an ortho disc projects to its diameter.
+  useLayoutEffect(() => {
+    gl.domElement.closest('[role="img"]')?.setAttribute("data-island-px", (2 * radius * pose.zoom).toFixed(1));
+  }, [gl, radius, pose]);
 
   useFrame(() => {
     const cam = camera.current, c = controls.current;
