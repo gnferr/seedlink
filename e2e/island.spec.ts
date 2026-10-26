@@ -57,14 +57,9 @@ test("keyboard fold reaches the verdict and Save downloads the PNG", async ({ pa
 });
 
 // An independent scan check of the saved file: finder rings and the quiet zone, sampled here (not by sampleScan).
-test("the saved PNG has three finder patterns and a light quiet zone", async ({ page }) => {
-  await ready(page);
-  await fold(page);
-  const total = Number(VERDICT.exec(await hint(page))![1]);
-  const size = Math.sqrt(total);
-  expect(Number.isInteger(size)).toBe(true);
-  const [dl] = await Promise.all([page.waitForEvent("download"), save(page).click()]);
-  const url = `data:image/png;base64,${readFileSync((await dl.path())!).toString("base64")}`;
+// Independent scan check of a saved PNG: finder rings and the quiet zone, sampled here (not by sampleScan).
+async function checkPng(page: Page, path: string, size: number) {
+  const url = `data:image/png;base64,${readFileSync(path).toString("base64")}`;
   // The PNG is the drawing buffer; the page framed the code with CSS-px insets measured as below.
   const geo = await page.evaluate(async (src) => {
     const img = new Image();
@@ -110,6 +105,20 @@ test("the saved PNG has three finder patterns and a light quiet zone", async ({ 
   expect(minLight - maxDark, `finder dark max ${maxDark}, light/quiet min ${minLight}`).toBeGreaterThan(60);
   // Uniform: no quiet-zone module strays far from the others (a tile or shadow would).
   expect(Math.max(...q) - Math.min(...q), "quiet zone spread").toBeLessThan(40);
+}
+
+async function foldAndSave(page: Page) {
+  await fold(page);
+  const size = Math.sqrt(Number(VERDICT.exec(await hint(page))![1]));
+  expect(Number.isInteger(size)).toBe(true);
+  const [dl] = await Promise.all([page.waitForEvent("download"), save(page).click()]);
+  return { path: (await dl.path())!, size };
+}
+
+test("the saved PNG has three finder patterns and a light quiet zone", async ({ page }) => {
+  await ready(page);
+  const { path, size } = await foldAndSave(page);
+  await checkPng(page, path, size);
 });
 
 test("the season panel takes focus and gives it back", async ({ page }) => {
@@ -416,8 +425,9 @@ test("dragging time while folded disables Save until the new verdict", async ({ 
   await ready(page);
   await fold(page);
   await openPanel(page);
+  await watchSave(page);
   await setTime(page, 1000);
-  await disabled(page);
+  expect(await sawDisabled(page), "Save was disabled on drag").toBe(true);
   await expect(chip(page)).toHaveText(VERDICT, { timeout: 20_000 });
   await enabled(page);
 });
@@ -426,9 +436,8 @@ test("the Night PNG has a neutral backdrop and still keeps finders and quiet zon
   await ready(page);
   await openPanel(page);
   await setTime(page, 1000);
-  await fold(page);
-  const [dl] = await Promise.all([page.waitForEvent("download"), save(page).click()]);
-  const url = `data:image/png;base64,${readFileSync((await dl.path())!).toString("base64")}`;
+  const { path, size } = await foldAndSave(page);
+  const url = `data:image/png;base64,${readFileSync(path).toString("base64")}`;
   const corners = await page.evaluate(async (src) => {
     const img = new Image();
     img.src = src;
@@ -441,6 +450,7 @@ test("the Night PNG has a neutral backdrop and still keeps finders and quiet zon
     return [[0, 0], [img.width - 1, 0], [0, img.height - 1], [img.width - 1, img.height - 1]].map(([x, y]) => [...ctx.getImageData(x, y, 1, 1).data.slice(0, 3)]);
   }, url);
   for (const px of corners) px.forEach((v, i) => expect(Math.abs(v - [0xec, 0xe8, 0xf2][i])).toBeLessThanOrEqual(6));
+  await checkPng(page, path, size);
 });
 
 test("Winter at the Night end folds to a full verdict", async ({ page }) => {
