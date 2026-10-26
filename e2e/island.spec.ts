@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { QUIET_ZONE } from "../src/lib/qr";
-import { scanFit } from "../src/lib/scanFit";
+import { generateMatrix, QUIET_ZONE, type QrMatrix } from "../src/lib/qr";
+import { QR_IMAGE } from "../src/lib/qrImage";
+import { scanFit, tooSmallToScan } from "../src/lib/scanFit";
+import { saveBlockedReason } from "../src/lib/status";
 
 const VERDICT = /^Scans · (\d+)\/\1 modules/;
 const NOT_FOLDED = "Fold the tree into your code first, then save.";
@@ -56,12 +58,13 @@ test("keyboard fold reaches the verdict and Save downloads the PNG", async ({ pa
   expect(dl.suggestedFilename()).toBe("sky-island-qr.png");
 });
 
-// An independent scan check of the saved file: finder rings and the quiet zone, sampled here (not by sampleScan).
-// Independent scan check of a saved PNG: finder rings and the quiet zone, sampled here (not by sampleScan).
-async function checkPng(page: Page, path: string, size: number) {
+// The saved file is drawn from the matrix: (size + 8) * 16 px square, ink on white, one 16 px square per module.
+async function checkPng(page: Page, path: string, m: QrMatrix) {
+  const M = QR_IMAGE.moduleSize, side = (m.size + 2 * QUIET_ZONE) * M;
   const url = `data:image/png;base64,${readFileSync(path).toString("base64")}`;
-  // The PNG is the drawing buffer; the page framed the code with CSS-px insets measured as below.
-  const geo = await page.evaluate(async (src) => {
+  const pts = [[0, 0], [side - 1, 0], [0, side - 1], [side - 1, side - 1]];
+  for (let z = 0; z < m.size; z++) for (let x = 0; x < m.size; x++) pts.push([(x + QUIET_ZONE) * M + M / 2, (z + QUIET_ZONE) * M + M / 2]);
+  const png = await page.evaluate(async ({ src, pts }) => {
     const img = new Image();
     img.src = src;
     await img.decode();
@@ -70,55 +73,36 @@ async function checkPng(page: Page, path: string, size: number) {
     c.height = img.height;
     const ctx = c.getContext("2d", { willReadFrequently: true })!;
     ctx.drawImage(img, 0, 0);
-    (window as unknown as { png: CanvasRenderingContext2D }).png = ctx;
-    const main = document.querySelector("main")!.getBoundingClientRect();
-    const bottom = Math.ceil(main.bottom - document.querySelector(".bar")!.getBoundingClientRect().top);
-    return { w: img.width, h: img.height, cssH: document.querySelector("canvas")!.clientHeight, bottom };
-  }, url);
-  const k = geo.h / geo.cssH;
-  const { zoom: pitch, dy } = scanFit(geo.w, geo.h, size + 2 * QUIET_ZONE, { top: 0, bottom: geo.bottom * k });
-  const mid = (size - 1) / 2;
-  const at = (x: number, z: number) => [Math.floor(geo.w / 2 + (x - mid) * pitch), Math.floor(geo.h / 2 + dy + (z - mid) * pitch)];
-
-  const dark: number[][] = [], light: number[][] = [], quiet: number[][] = [];
-  for (const [fx, fz] of [[0, 0], [size - 7, 0], [0, size - 7]])
+    const { data } = ctx.getImageData(0, 0, img.width, img.height);
+    const hex = ([x, y]: number[]) => "#" + [0, 1, 2].map((i) => data[(y * img.width + x) * 4 + i].toString(16).padStart(2, "0")).join("");
+    return { w: img.width, h: img.height, px: pts.map(hex) };
+  }, { src: url, pts });
+  expect([png.w, png.h]).toEqual([side, side]);
+  expect(png.px.slice(0, 4), "corners").toEqual(Array(4).fill(QR_IMAGE.background));
+  const got = png.px.slice(4);
+  // Finder rings on the module grid: dark border, light ring, dark 3x3 centre.
+  for (const [fx, fz] of [[0, 0], [m.size - 7, 0], [0, m.size - 7]])
     for (let i = 0; i < 7; i++)
       for (let j = 0; j < 7; j++) {
-        const ring = Math.max(Math.abs(i - 3), Math.abs(j - 3)); // 3: dark border, 2: light ring, <= 1: dark centre
-        (ring === 2 ? light : dark).push(at(fx + i, fz + j));
+        const ring = Math.max(Math.abs(i - 3), Math.abs(j - 3));
+        expect(got[(fz + j) * m.size + fx + i], `finder module (${fx + i}, ${fz + j})`).toBe(ring === 2 ? QR_IMAGE.background : QR_IMAGE.ink);
       }
-  for (let z = -QUIET_ZONE; z < size + QUIET_ZONE; z++)
-    for (let x = -QUIET_ZONE; x < size + QUIET_ZONE; x++)
-      if (x < 0 || z < 0 || x >= size || z >= size) quiet.push(at(x, z));
-
-  const luma = (pts: number[][]) =>
-    page.evaluate((pts) => {
-      const ctx = (window as unknown as { png: CanvasRenderingContext2D }).png;
-      return pts.map(([x, y]) => {
-        const d = ctx.getImageData(x, y, 1, 1).data;
-        return 0.2126 * d[0] + 0.7152 * d[1] + 0.0722 * d[2];
-      });
-    }, pts);
-  const [d, l, q] = [await luma(dark), await luma(light), await luma(quiet)];
-  const maxDark = Math.max(...d);
-  const minLight = Math.min(...l, ...q);
-  expect(minLight - maxDark, `finder dark max ${maxDark}, light/quiet min ${minLight}`).toBeGreaterThan(60);
-  // Uniform: no quiet-zone module strays far from the others (a tile or shadow would).
-  expect(Math.max(...q) - Math.min(...q), "quiet zone spread").toBeLessThan(40);
+  const want = Array.from(m.cells, (c) => (c === 1 ? QR_IMAGE.ink : QR_IMAGE.background));
+  expect(got.findIndex((c, i) => c !== want[i]), "first module centre that differs from the matrix").toBe(-1);
 }
 
 async function foldAndSave(page: Page) {
   await fold(page);
-  const size = Math.sqrt(Number(VERDICT.exec(await hint(page))![1]));
-  expect(Number.isInteger(size)).toBe(true);
+  const m = generateMatrix(await field(page).inputValue());
+  expect(Number(VERDICT.exec(await hint(page))![1])).toBe(m.size * m.size);
   const [dl] = await Promise.all([page.waitForEvent("download"), save(page).click()]);
-  return { path: (await dl.path())!, size };
+  return { path: (await dl.path())!, m };
 }
 
-test("the saved PNG has three finder patterns and a light quiet zone", async ({ page }) => {
+test("the saved PNG is the plain code: finders on the grid and every module matching the matrix", async ({ page }) => {
   await ready(page);
-  const { path, size } = await foldAndSave(page);
-  await checkPng(page, path, size);
+  const { path, m } = await foldAndSave(page);
+  await checkPng(page, path, m);
 });
 
 test("the season panel takes focus and gives it back", async ({ page }) => {
@@ -392,7 +376,11 @@ test("season, leaf colour and time never regrow the tree", async ({ page }) => {
   expect(await attr(page, "data-tree-seed")).toBe(seed);
 });
 
+// Pinned to daytime: from 23:00 to 06:00 the slider starts at its Night end, where ArrowRight and 1000 change nothing.
+const DAYTIME = new Date(2026, 9, 26, 14, 30);
+
 test("the Time of day slider exists and ArrowRight changes its text", async ({ page }) => {
+  await page.clock.setFixedTime(DAYTIME);
   await ready(page);
   await openPanel(page);
   await expect(slider(page)).toBeVisible();
@@ -423,6 +411,7 @@ for (const v of [0, 1000]) {
 }
 
 test("dragging time while folded disables Save until the new verdict", async ({ page }) => {
+  await page.clock.setFixedTime(DAYTIME);
   await ready(page);
   await fold(page);
   await openPanel(page);
@@ -433,25 +422,12 @@ test("dragging time while folded disables Save until the new verdict", async ({ 
   await enabled(page);
 });
 
-test("the Night PNG has a neutral backdrop and still keeps finders and quiet zone", async ({ page }) => {
+test("the Night PNG is still the plain code on white", async ({ page }) => {
   await ready(page);
   await openPanel(page);
   await setTime(page, 1000);
-  const { path, size } = await foldAndSave(page);
-  const url = `data:image/png;base64,${readFileSync(path).toString("base64")}`;
-  const corners = await page.evaluate(async (src) => {
-    const img = new Image();
-    img.src = src;
-    await img.decode();
-    const c = document.createElement("canvas");
-    c.width = img.width;
-    c.height = img.height;
-    const ctx = c.getContext("2d", { willReadFrequently: true })!;
-    ctx.drawImage(img, 0, 0);
-    return [[0, 0], [img.width - 1, 0], [0, img.height - 1], [img.width - 1, img.height - 1]].map(([x, y]) => [...ctx.getImageData(x, y, 1, 1).data.slice(0, 3)]);
-  }, url);
-  for (const px of corners) px.forEach((v, i) => expect(Math.abs(v - [0xec, 0xe8, 0xf2][i])).toBeLessThanOrEqual(6));
-  await checkPng(page, path, size);
+  const { path, m } = await foldAndSave(page);
+  await checkPng(page, path, m);
 });
 
 test("Winter at the Night end folds to a full verdict", async ({ page }) => {
@@ -460,4 +436,137 @@ test("Winter at the Night end folds to a full verdict", async ({ page }) => {
   await page.getByRole("radio", { name: "Winter" }).click();
   await setTime(page, 1000);
   await fold(page);
+});
+
+// ---- fixed island scale, long links and seamless modules ----
+/** A text whose code is exactly `size` modules (or the first at least that big, with `atLeast`). */
+function linkOfSize(size: number, atLeast = false) {
+  for (let n = 1; n < 3000; n++) {
+    const text = "a".repeat(n); // a short URL prefix alone overflows a 21-module code at level H
+    const s = generateMatrix(text).size;
+    if (s === size || (atLeast && s > size)) return { text, size: s };
+  }
+  throw new Error(`no link of ${size} modules`);
+}
+async function typeLink(page: Page, text: string) {
+  await field(page).fill(text);
+  await expect(scene(page)).toHaveAttribute("aria-label", new RegExp(`"${text}"`), { timeout: 10_000 });
+  await expect(chip(page)).toContainText("Tap the tree", { timeout: 30_000 });
+}
+/** The code's framing as the page measures it: the hint bar covers the bottom of <main>, CSS px. */
+const chromeFrame = (page: Page) =>
+  page.evaluate(() => {
+    const main = document.querySelector("main")!;
+    const bottom = Math.ceil(main.getBoundingClientRect().bottom - document.querySelector(".bar")!.getBoundingClientRect().top);
+    return { w: main.clientWidth, h: main.clientHeight, bottom };
+  });
+
+test("the island is the same size on screen for a 21- and a 57-module link", async ({ page }) => {
+  // The fit follows the tree's height, so both links must grow the same tree: Math.random (the app uses it only to
+  // draw the species and seed) is seeded, and each link starts from a fresh load, so both see the same draws.
+  await page.addInitScript(() => {
+    let a = 42; // mulberry32
+    Math.random = () => {
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  });
+  const px: number[] = [], trees = new Set<string>();
+  for (const size of [21, 57]) {
+    await ready(page);
+    await typeLink(page, linkOfSize(size).text);
+    await expect(scene(page)).toHaveAttribute("data-phase", "tree", { timeout: 20_000 });
+    px.push(Number(await attr(page, "data-island-px")));
+    trees.add(`${await attr(page, "data-species")}/${await attr(page, "data-tree-seed")}`);
+  }
+  expect(trees.size, "both links grew the same tree").toBe(1);
+  expect(px[0]).toBeGreaterThan(0);
+  expect(Math.abs(px[1] - px[0]) / px[0], `island px ${px}`).toBeLessThanOrEqual(0.02);
+});
+
+test("a 101+ module link folds at 1440x900; at 390x844 the copy is what saveBlockedReason gives", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await ready(page);
+  const { text, size } = linkOfSize(101, true);
+  expect(size).toBeGreaterThanOrEqual(101);
+  await typeLink(page, text);
+  await fold(page);
+  await enabled(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(async () => (await chromeFrame(page)).w).toBe(390);
+  const f = await chromeFrame(page);
+  const tooSmall = tooSmallToScan(f.w, f.h, size + 2 * QUIET_ZONE, { top: 0, bottom: f.bottom });
+  const pass = { matched: 1, total: 1, worstCaseContrast: 21, separated: true };
+  const reason = saveBlockedReason({ hasCode: true, tooLong: false, tooSmall, phase: "folded", separation: pass, gradedNow: true });
+  if (reason) {
+    await expect(chip(page)).toHaveText(reason, { timeout: 20_000 });
+    await expect(page.locator("#save-reason")).toHaveText(reason);
+  } else {
+    await expect(chip(page)).toHaveText(VERDICT, { timeout: 20_000 });
+    await enabled(page);
+  }
+});
+
+test("no seam between horizontally adjacent dark modules in the folded frame", async ({ page }) => {
+  await ready(page);
+  await fold(page);
+  const m = generateMatrix(await field(page).inputValue());
+  // The top-left finder's centre row: (2,3) and (3,3) are dark with dark all round, so a pixel or two of framing
+  // error can't put a sample on a light module; only a gap between the two blocks would show between them.
+  const [x0, z] = [2, 3];
+  expect([m.cells[z * m.size + x0], m.cells[z * m.size + x0 + 1]]).toEqual([1, 1]);
+  const f = await chromeFrame(page);
+  const buf = await page.evaluate(() => {
+    const c = document.querySelector("canvas")!;
+    return { w: c.width, h: c.height, k: c.height / c.clientHeight };
+  });
+  // Module centre px = buffer centre + (x - mid) * pitch, + dy: the sampleScan geometry, insets in buffer px.
+  const { zoom: pitch, dy } = scanFit(buf.w, buf.h, m.size + 2 * QUIET_ZONE, { top: 0, bottom: f.bottom * buf.k });
+  const mid = (m.size - 1) / 2;
+  const pts = [x0, x0 + 0.5, x0 + 1].map((x) => [Math.floor(buf.w / 2 + (x - mid) * pitch), Math.floor(buf.h / 2 + dy + (z - mid) * pitch)]);
+  const lumas = await page.evaluate((pts) => {
+    const canvas = document.querySelector("canvas")!;
+    const copy = document.createElement("canvas");
+    copy.width = canvas.width;
+    copy.height = canvas.height;
+    const ctx = copy.getContext("2d", { willReadFrequently: true })!;
+    ctx.drawImage(canvas, 0, 0);
+    return pts.map(([x, y]) => {
+      const d = ctx.getImageData(x, y, 1, 1).data;
+      return 0.2126 * d[0] + 0.7152 * d[1] + 0.0722 * d[2];
+    });
+  }, pts);
+  const [a, seam, b] = lumas;
+  expect(Math.abs(seam - a), `lumas ${lumas}`).toBeLessThanOrEqual(10);
+  expect(Math.abs(seam - b), `lumas ${lumas}`).toBeLessThanOrEqual(10);
+});
+
+test("at 390x844 the whole crown fits the viewport width for several species", async ({ browser }) => {
+  const seen = new Set<string>();
+  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    await page.addInitScript((s) => {
+      let a = s; // mulberry32, picks the species and seed
+      Math.random = () => {
+        a = (a + 0x6d2b79f5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }, seed);
+    await ready(page);
+    await expect(scene(page)).toHaveAttribute("data-phase", "tree", { timeout: 20_000 });
+    const species = (await attr(page, "data-species"))!;
+    seen.add(species);
+    await expect(scene(page)).toHaveAttribute("data-crown-px", /\d/);
+    const crown = Number(await attr(page, "data-crown-px"));
+    expect(crown, `${species} (seed ${seed}) crown px`).toBeLessThanOrEqual(390);
+    await ctx.close();
+  }
+  console.log("species covered:", [...seen].join(","));
+  expect(seen.size).toBeGreaterThanOrEqual(3);
+  expect([...seen]).toEqual(expect.arrayContaining(["oak", "willow"]));
 });

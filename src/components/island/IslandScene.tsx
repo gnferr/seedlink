@@ -7,12 +7,12 @@ import { easeInOutCubic, FOLD_SECONDS, foldPieces, planFold } from "@/lib/fold";
 import { growIsland } from "@/lib/island";
 import { treeColours } from "@/lib/palette";
 import { isTap, nextFoldTarget } from "@/lib/pointer";
-import { darkModules, type QrMatrix } from "@/lib/qr";
+import { darkModules, modulePitch, REF_SIZE, type QrMatrix } from "@/lib/qr";
 import { hashString } from "@/lib/rng";
 import type { ScanInsets } from "@/lib/scanFit";
 import type { Season } from "@/lib/seasons";
 import type { FoldPhase } from "@/lib/status";
-import { growTree, pickSpecies, type Species } from "@/lib/tree";
+import { fitTree, growTree, pickSpecies, type Species } from "@/lib/tree";
 import FoldCamera from "./FoldCamera";
 import IslandMesh from "./IslandMesh";
 import Particles from "./Particles";
@@ -30,42 +30,7 @@ export type IslandSceneProps = {
   onTap(action: "fold" | "grow" | "poke"): void;
   onCanvasReady(canvas: HTMLCanvasElement): void;
   onTree(species: Species, seed: number): void; // a new random tree began growing
-  onExportReady(render: () => HTMLCanvasElement): void; // render() draws the current view on the plain backdrop
 };
-
-const BACKDROP = new THREE.Color("#ece8f2");
-
-/** Registers the Save render: one frame without the sky (objects tagged userData.sky) on the plain backdrop, copied out. */
-function Exporter({ onExportReady }: { onExportReady: IslandSceneProps["onExportReady"] }) {
-  const gl = useThree((s) => s.gl);
-  const scene = useThree((s) => s.scene);
-  const camera = useThree((s) => s.camera);
-  useEffect(() => {
-    onExportReady(() => {
-      const hidden: THREE.Object3D[] = [];
-      scene.traverse((o) => {
-        if (o.userData.sky && o.visible) hidden.push(o);
-      });
-      const background = scene.background;
-      hidden.forEach((o) => (o.visible = false));
-      scene.background = BACKDROP;
-      try {
-        gl.render(scene, camera);
-        const src = gl.domElement;
-        const copy = document.createElement("canvas");
-        copy.width = src.width;
-        copy.height = src.height;
-        copy.getContext("2d")?.drawImage(src, 0, 0);
-        return copy;
-      } finally {
-        scene.background = background;
-        hidden.forEach((o) => (o.visible = true));
-        gl.render(scene, camera); // the preserved buffer shows the sky again before the next frame
-      }
-    });
-  }, [gl, scene, camera, onExportReady]);
-  return null;
-}
 
 /** Shared per-frame fold state: `t` drives the blocks, `cam` the camera tween (both 0 = tree, 1 = folded). */
 export type FoldState = { t: number; cam: number; poke: number };
@@ -175,7 +140,7 @@ const draw = (previous: Species | null, matrix: QrMatrix, folded: boolean): Grow
   ({ matrix, folded, species: pickSpecies(previous, Math.random()), seed: Math.floor(Math.random() * 2 ** 31) });
 
 export default function IslandScene(props: IslandSceneProps) {
-  const { text, matrix, season, leaf, time, folded, reducedMotion, insets, onPhase, onTap, onCanvasReady, onTree, onExportReady } = props;
+  const { text, matrix, season, leaf, time, folded, reducedMotion, insets, onPhase, onTap, onCanvasReady, onTree } = props;
   const [phase, setPhase] = useState<FoldPhase>(folded ? "folded" : "tree");
   const fold = useRef<FoldState>({ t: folded ? 1 : 0, cam: folded ? 1 : 0, poke: 0 });
   // The poke shake is the scene's; sound and everything else is the page's call.
@@ -191,15 +156,17 @@ export default function IslandScene(props: IslandSceneProps) {
   const { species, seed: treeSeed } = grow;
   useEffect(() => onTree(species, treeSeed), [species, treeSeed, onTree]);
 
-  const dark = useMemo(() => darkModules(matrix), [matrix]);
-  const island = useMemo(() => growIsland(hashString(text), matrix.size), [text, matrix.size]);
-  const tree = useMemo(() => growTree(species, treeSeed, matrix.size), [species, treeSeed, matrix.size]);
+  // The world is fixed at REF_SIZE; a longer link gets more, smaller modules on the same slab.
+  const pitch = modulePitch(matrix.size);
+  const dark = useMemo(() => darkModules(matrix, pitch), [matrix, pitch]);
+  const island = useMemo(() => growIsland(hashString(text), REF_SIZE), [text]);
+  const tree = useMemo(() => fitTree(growTree(species, treeSeed, REF_SIZE), island.radius), [species, treeSeed, island.radius]);
   // The season's leafKeep changes the carriers (only shown leaves carry; winter cards never) but never the tree.
   const leafKeep = treeColours(season, species, null).leafKeep;
   const foldPlan = useMemo(() => {
     const pieces = foldPieces(tree, leafKeep);
-    return { pieces, plan: planFold(pieces, tree.top, dark, treeSeed) };
-  }, [tree, leafKeep, dark, treeSeed]);
+    return { pieces, plan: planFold(pieces, tree.top, dark, treeSeed, pitch) };
+  }, [tree, leafKeep, dark, treeSeed, pitch]);
 
   const treeRef = useRef<THREE.Group>(null);
   const groundRef = useRef<THREE.Group>(null);
@@ -220,13 +187,12 @@ export default function IslandScene(props: IslandSceneProps) {
       <SkyDome time={time} />
       <SkyLights time={time} fold={fold} radius={island.radius} reducedMotion={reducedMotion} />
       <Timeline foldRef={fold} folded={folded} reducedMotion={reducedMotion} world={tree} bobRef={bobRef} ratio={ratio} setPhase={setPhase} onPhase={onPhase} />
-      <FoldCamera radius={island.radius} top={tree.top} size={matrix.size} insets={insets} fold={fold} orbit={phase === "tree"} />
+      <FoldCamera radius={island.radius} top={tree.top} crownRadius={tree.crownRadius} size={matrix.size} insets={insets} fold={fold} orbit={phase === "tree"} />
       <group ref={bobRef}>
-        <IslandMesh island={island} dark={dark} size={matrix.size} season={season} fold={fold} reducedMotion={reducedMotion} groupRef={groundRef} />
+        <IslandMesh island={island} dark={dark} size={matrix.size} pitch={pitch} season={season} fold={fold} reducedMotion={reducedMotion} groupRef={groundRef} />
         <TreeMesh tree={tree} pieces={foldPlan.pieces} plan={foldPlan.plan} dark={dark} season={season} leaf={leaf} fold={fold} reducedMotion={reducedMotion} groupRef={treeRef} />
         {!reducedMotion && phase !== "folded" && <Particles tree={tree} season={season} fold={fold} />}
       </group>
-      <Exporter onExportReady={onExportReady} />
       <Taps phase={phase} tree={treeRef} ground={groundRef} onTap={tap} />
     </Canvas>
   );

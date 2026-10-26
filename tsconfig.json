@@ -31,6 +31,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  // e2e/environment.spec.ts: temporary, until the owner rewrites or removes that uncommitted spec.
-  "exclude": ["node_modules", "e2e/environment.spec.ts"]
+  "exclude": ["node_modules"]
 }

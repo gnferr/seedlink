@@ -134,3 +134,16 @@ export function growTree(species: Species, seed: number, size: number): Tree {
   }
   return { species, cards, segments, top, trunkHeight, crownRadius };
 }
+
+export const CROWN_TO_ISLAND = 1.5, BIRCH_CROWN_TO_ISLAND = 1.1;
+
+// Uniformly scales a grown tree so its crown is a fixed multiple of the island, whatever the link length.
+export function fitTree(tree: Tree, islandRadius: number): Tree {
+  const k = (tree.species === "birch" ? BIRCH_CROWN_TO_ISLAND : CROWN_TO_ISLAND) * islandRadius / tree.crownRadius;
+  return {
+    ...tree,
+    cards: tree.cards.map((c) => ({ ...c, x: c.x * k, y: c.y * k, z: c.z * k, size: c.size * k })),
+    segments: tree.segments.map((s) => ({ x0: s.x0 * k, y0: s.y0 * k, z0: s.z0 * k, x1: s.x1 * k, y1: s.y1 * k, z1: s.z1 * k, r0: s.r0 * k, r1: s.r1 * k })),
+    top: tree.top * k, trunkHeight: tree.trunkHeight * k, crownRadius: tree.crownRadius * k,
+  };
+}

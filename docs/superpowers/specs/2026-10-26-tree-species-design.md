@@ -253,3 +253,28 @@ Mockups:
 - **How:** on Save, render one extra frame from the same folded, settled camera with the sky hidden and the backdrop shown, read it, then restore the sky. The island, pad and code stay exactly as on screen.
 - **Safety (designer's call):** before downloading, run the existing module-centre check (`sampleBuffer`) on that export frame. If the export frame does not pass, Save refuses with the usual reason. This keeps the rule that what is exported has passed the check.
 - The e2e PNG check (finder patterns and a light 4-module quiet zone) runs on this backdrop export, and gains one assertion: the corners of the saved image are the backdrop colour.
+
+---
+
+# Part 3: Fixed island size, a bigger tree, a plain QR export (2026-10-27)
+
+Found by the owner while testing. Approved in chat ("Yeah, for now").
+
+## Problems found
+
+- **The island changes size with the link.** A long link makes a large island and a small-looking tree; a short link shrinks the island. This happens because each QR module is one world unit.
+- **A white grid shows between dark modules.** Tiles and ink blocks are drawn at 0.98 of a cell, so the light pad shows through as thin lines.
+
+## Decisions (owner)
+
+1. **Fixed island size.** The slab and island are the same size whatever the link length; longer links get more, smaller modules on the same slab. The island shape is still seeded from the link.
+2. **Bigger tree.** The crown is about 1.5× the island's width for every species, the same size for every link length. The birch stays the slim exception but still reaches well past the island edge.
+3. **No white grid.** Dark tiles and folded ink blocks are drawn at the full cell width, so neighbouring dark modules join.
+4. **Plain QR export.** Save writes a flat QR image drawn straight from the matrix: dark modules on a light background with the 4-module quiet zone, and no grass, island, tree or sky. Save stays gated on a passed on-screen check after folding. The neutral-backdrop 3D export render from Part 2 is removed.
+
+## Designer's calls
+
+- **Export look:** ink `#2a2140` on white `#ffffff`, 16 px per module, file name unchanged (`sky-island-qr.png`). Before download, the image is checked with the existing module-centre sampler, as a self-check.
+- **Reference scale:** the world is built as if every code were 25 modules. The slab is (25 + 8) units wide, and module pitch = 33 / (size + 8) units.
+- **Tree scaling:** the tree is generated at the reference size, then scaled so its `crownRadius` is 1.5 × the island radius. The birch is scaled to 1.1 × instead.
+- **Scan framing:** the folded camera keeps each module at today's on-screen pixel size, by dividing the zoom by the pitch. The sampler is unchanged.

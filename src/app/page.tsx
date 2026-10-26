@@ -11,7 +11,8 @@ import { exportPng } from "@/lib/exporters";
 import { useReducedMotion } from "@/lib/useReducedMotion";
 import type { Season } from "@/lib/seasons";
 import { PALETTES } from "@/lib/palette";
-import { bufferScale, sampleScan } from "@/lib/sampleScan";
+import { QR_IMAGE, qrPixels } from "@/lib/qrImage";
+import { sampleBuffer, sampleScan } from "@/lib/sampleScan";
 import type { Separation } from "@/lib/verify";
 import { frameKey, nextScanFrame, NO_INSETS, tooSmallToScan, type ScanFrame } from "@/lib/scanFit";
 import { hintAction, hintText, saveBlockedReason, type FoldPhase, type StatusInput } from "@/lib/status";
@@ -152,16 +153,16 @@ export default function Home() {
     return () => clearTimeout(id);
   }, [phase, tooSmall, verifyKey, currentFrame, frame.insets, qr.matrix, glEpoch]);
 
-  const exportRef = useRef<(() => HTMLCanvasElement) | null>(null);
-  const onExportReady = useCallback((render: () => HTMLCanvasElement) => { exportRef.current = render; }, []);
-  // The file is a fresh render on the plain backdrop, so it is checked again at the on-screen module centres.
+  // The file is drawn from the matrix alone, not the scene; it is still self-checked before it downloads.
   const saveImage = () => {
-    const canvas = canvasRef.current, render = exportRef.current;
-    if (!canvas || !render) return;
-    const copy = render();
-    const separation = sampleScan(copy, qr.matrix, frame.insets, bufferScale(canvas.height, canvas.clientHeight));
-    if (separation.separated) exportPng(copy, "sky-island-qr.png");
-    else setScan({ key: verifyKey, frame: currentFrame, separation }); // Save now says why it won't scan
+    const img = qrPixels(qr.matrix);
+    const separation = sampleBuffer(img.data, img.width, img.height, qr.matrix, QR_IMAGE.moduleSize);
+    if (!separation.separated) return setScan({ key: verifyKey, frame: currentFrame, separation }); // Save now says why it won't scan
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    canvas.getContext("2d")?.putImageData(new ImageData(img.data, img.width, img.height), 0, 0);
+    exportPng(canvas, "sky-island-qr.png");
   };
 
   const onCanvasReady = useCallback((c: HTMLCanvasElement) => {
@@ -254,7 +255,6 @@ export default function Home() {
               onTap={onTap}
               onCanvasReady={onCanvasReady}
               onTree={onTree}
-              onExportReady={onExportReady}
             />
           </SceneBoundary>
         )}

@@ -18,4 +18,8 @@ test-results/
 Thumbs.db
 
 my-personal-notes.txt
-.impeccable/hook.cache.json
+.impeccable/
+
+.claude/
+.codex/
+.gemini/

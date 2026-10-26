@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { darkModules, generateMatrix } from "./qr.ts";
+import { darkModules, generateMatrix, modulePitch } from "./qr.ts";
 import { growTree, SPECIES } from "./tree.ts";
 import { cardShown, easeInOutCubic, extraPose, foldPieces, inkPose, piecePose, planFold, MODULE_BLOCK, type Pose } from "./fold.ts";
 
@@ -20,7 +20,7 @@ const darks = new Map(SIZES.map((s) => [s, darkModules(codeOf(s))]));
 function eachCase(fn: (c: { species: string; size: number; winter: boolean; tree: ReturnType<typeof growTree>; pieces: ReturnType<typeof foldPieces>; dark: ReturnType<typeof darkModules>; plan: ReturnType<typeof planFold> }) => void) {
   for (const species of SPECIES) for (const size of SIZES) for (const winter of [false, true]) {
     const tree = growTree(species, 5, size), pieces = foldPieces(tree, winter ? 0.08 : 1), dark = darks.get(size)!;
-    fn({ species, size, winter, tree, pieces, dark, plan: planFold(pieces, tree.top, dark, 1) });
+    fn({ species, size, winter, tree, pieces, dark, plan: planFold(pieces, tree.top, dark, 1, 1) });
   }
 }
 
@@ -43,7 +43,7 @@ test("t = 1: ink blocks sit on their modules, pieces are gone", () => {
     dark.forEach((m, j) => {
       inkPose(plan, pieces, dark, j, 1, o);
       near(o.x, m.x); near(o.y, MODULE_BLOCK.y); near(o.z, m.z);
-      near(o.sx, 0.98); near(o.sy, 0.6); near(o.sz, 0.98);
+      near(o.sx, 1); near(o.sy, 0.6); near(o.sz, 1);
     });
     pieces.forEach((_, i) => { piecePose(plan, pieces, dark, i, 1, o); near(o.sx, 0); near(o.sy, 0); near(o.sz, 0); });
   });
@@ -62,14 +62,14 @@ test("t = 0: ink blocks are hidden, pieces sit at their start", () => {
 
 test("plans are deterministic", () => {
   const tree = growTree("oak", 3, 25), pieces = foldPieces(tree, 1), dark = darks.get(25)!;
-  const a = planFold(pieces, tree.top, dark, 9), b = planFold(pieces, tree.top, dark, 9);
+  const a = planFold(pieces, tree.top, dark, 9, 1), b = planFold(pieces, tree.top, dark, 9, 1);
   assert.deepEqual(a.carrier, b.carrier);
   assert.deepEqual(a.delay, b.delay);
 });
 
 test("cards carry before segments", () => {
   const tree = growTree("oak", 3, 25), pieces = foldPieces(tree, 1), dark = darks.get(25)!;
-  const plan = planFold(pieces, tree.top, dark, 1);
+  const plan = planFold(pieces, tree.top, dark, 1, 1);
   const carrying = tree.cards.filter((c) => !c.speck).length;
   const cardCarriers = [...plan.carrier].slice(0, tree.cards.length).filter((c) => c >= 0).length;
   assert.equal(cardCarriers, Math.min(dark.length, carrying));
@@ -77,27 +77,50 @@ test("cards carry before segments", () => {
 
 test("birch in winter at size 37 still covers every module once", () => {
   const tree = growTree("birch", 9, 37), pieces = foldPieces(tree, 0.08), dark = darks.get(37)!;
-  const plan = planFold(pieces, tree.top, dark, 4);
+  const plan = planFold(pieces, tree.top, dark, 4, 1);
   const seen = [...plan.carrier].filter((c) => c >= 0).concat(plan.extras).sort((a, b) => a - b);
   assert.deepEqual(seen, dark.map((_, i) => i));
 });
 
 test("extraPose grows in over the second half", () => {
   const m = darks.get(21)![0];
-  const o = extraPose(m, 1, blank());
-  near(o.x, m.x); near(o.y, 0.3); near(o.z, m.z); near(o.sx, 0.98); near(o.sy, 0.6); near(o.sz, 0.98);
-  const s = extraPose(m, 0.4, blank());
+  const o = extraPose(m, 1, blank(), 1);
+  near(o.x, m.x); near(o.y, 0.3); near(o.z, m.z); near(o.sx, 1); near(o.sy, 0.6); near(o.sz, 1);
+  const s = extraPose(m, 0.4, blank(), 1);
   near(s.sx, 0); near(s.sy, 0);
 });
 
 test("autumn: only shown leaf cards carry, and every module is still covered once", () => {
   for (const species of SPECIES) for (const size of SIZES) {
     const tree = growTree(species, 5, size), pieces = foldPieces(tree, 0.6), dark = darks.get(size)!;
-    const plan = planFold(pieces, tree.top, dark, 1);
+    const plan = planFold(pieces, tree.top, dark, 1, 1);
     tree.cards.forEach((c, i) => { if (c.speck || !cardShown(i, 0.6)) assert.equal(plan.carrier[i], -1); });
     assert.ok(tree.cards.some((c, i) => !c.speck && !cardShown(i, 0.6)), "autumn hides some cards");
     const seen = [...plan.carrier].filter((c) => c >= 0).concat(plan.extras).sort((a, b) => a - b);
     assert.deepEqual(seen, dark.map((_, i) => i));
+  }
+});
+
+test("pitch 0.5: ink and extras land half-size at the scaled module", () => {
+  const dark = darkModules(codeOf(25), 0.5), tree = growTree("oak", 5, 25), pieces = foldPieces(tree, 1);
+  const plan = planFold(pieces, tree.top, dark, 1, 0.5), o = blank();
+  assert.equal(plan.pitch, 0.5);
+  dark.forEach((m, j) => {
+    inkPose(plan, pieces, dark, j, 1, o);
+    near(o.x, m.x); near(o.y, 0.3); near(o.z, m.z); near(o.sx, 0.5); near(o.sy, 0.6); near(o.sz, 0.5);
+  });
+  const e = extraPose(dark[0], 1, blank(), 0.5);
+  near(e.x, dark[0].x); near(e.z, dark[0].z); near(e.sx, 0.5); near(e.sy, 0.6); near(e.sz, 0.5);
+});
+
+test("every dark module is covered once at sizes 21, 37 and 57 with their pitch", () => {
+  for (const size of [21, 37, 57]) {
+    const p = modulePitch(size), dark = darkModules(codeOf(size), p);
+    for (const species of SPECIES) for (const keep of [1, 0.6, 0.08]) {
+      const tree = growTree(species, 5, size), pieces = foldPieces(tree, keep), plan = planFold(pieces, tree.top, dark, 1, p);
+      const seen = [...plan.carrier].filter((c) => c >= 0).concat(plan.extras).sort((a, b) => a - b);
+      assert.deepEqual(seen, dark.map((_, i) => i));
+    }
   }
 });
 
