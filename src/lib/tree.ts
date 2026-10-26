@@ -1,51 +1,136 @@
-// Big voxel tree whose crown overhangs the QR slab. Port of the spike's tree; pure and deterministic.
-import { hash3 } from "./rng.ts";
+// Semi-realistic pixel trees as leaf cards and tapered branch segments. A 3D port of the species mockup's
+// tree() (.superpowers/brainstorm/.../tree-pixel-variants.html): limbs radiate around the trunk in azimuth and the
+// mockup's 2D fan becomes elevation spread. Pure: a function of (species, seed, size).
+import { hash3, mulberry32 } from "./rng.ts";
 
-export type TreeKind = "trunk" | "root" | "leaf" | "vine";
-export type TreeVoxel = { x: number; y: number; z: number; kind: TreeKind; shade: number }; // y = cube centre, shade in [0, 1)
-export type Tree = { voxels: TreeVoxel[]; top: number; trunkHeight: number; crownRadius: number };
-export const TREE_VOXEL_BUDGET = 8000;
-export const TREE_GROWTH_CAP = 37;
+export type Species = "oak" | "lushOak" | "willow" | "acacia" | "birch" | "cherry";
+export const SPECIES: readonly Species[] = ["oak", "lushOak", "willow", "acacia", "birch", "cherry"];
+export type LeafCard = { x: number; y: number; z: number; rotY: number; tilt: number; size: number; shade: number; speck: boolean }; // speck = fruit/petal card, never a carrier
+export type Segment = { x0: number; y0: number; z0: number; x1: number; y1: number; z1: number; r0: number; r1: number }; // tapered limb piece
+export type Tree = { species: Species; cards: LeafCard[]; segments: Segment[]; top: number; trunkHeight: number; crownRadius: number };
+export const CARD_BUDGET = 6000, SEGMENT_BUDGET = 1500, TREE_GROWTH_CAP = 37;
 
-const CLUMP_SCALE = 0.9;
-const BASE: [number, number, number, number][] = [[0, 15, 0, 6.5], [5, 13.5, 2, 4.8], [-5, 13.5, -1, 4.8], [1, 13.5, -5.5, 4.6], [-2, 14, 5, 4.4], [4, 15.5, -3, 4], [-4, 16, 3, 3.6], [0, 17.5, 0, 3.8]];
-const FACES = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+type Cfg = {
+  trunkH: number; trunkW: number; limbs: number; fan: number; limbLow: number; limbLen: number; taper: number; depth: number;
+  split: number; fork: number; lift: number; bend: number; inner: number; clump: number; perClump: number; flat: number;
+  strands: number; strandLen: number; specks: number;
+};
+// Mockup VARIANTS (lush -> lushOak; sparse/autumn dropped). Colours live in palette.ts.
+const BASE: Cfg = { trunkH: 8, trunkW: 0.9, limbs: 7, fan: 2.6, limbLow: 0.62, limbLen: 5.2, taper: 0.5, depth: 3, split: 0.62, fork: 0.4, lift: 0.15, bend: 0.25, inner: 0.5, clump: 1.4, perClump: 22, flat: 0.78, strands: 0, strandLen: 0, specks: 0 };
+const VARIANTS: Record<Species, Cfg> = {
+  oak: { ...BASE },
+  lushOak: { ...BASE, clump: 1.9, perClump: 34, inner: 0.7, specks: 4 },
+  willow: { ...BASE, limbs: 6, fan: 2.9, lift: -0.25, bend: 0.5, clump: 1.2, perClump: 16, strands: 5, strandLen: 6 },
+  acacia: { ...BASE, trunkH: 6.5, limbs: 5, fan: 1.6, limbLow: 0.85, limbLen: 6.2, lift: 0.05, split: 0.8, clump: 2.2, perClump: 30, flat: 0.32, inner: 0.15 },
+  birch: { ...BASE, trunkH: 20, trunkW: 0.55, limbs: 9, fan: 1.4, limbLow: 0.35, limbLen: 4.4, taper: 0.2, depth: 2, lift: 0.35, clump: 1.05, perClump: 16, inner: 0.6 },
+  cherry: { ...BASE, trunkH: 6.5, limbs: 8, fan: 2.8, limbLow: 0.7, limbLen: 5.8, lift: 0, clump: 1.5, perClump: 24, flat: 0.62, inner: 0.4, specks: 4 },
+};
 
-export function growTree(size: number): Tree {
-  const TS = Math.max(1.1, Math.min(size, TREE_GROWTH_CAP) / 17);
-  const voxels: TreeVoxel[] = [];
-  const add = (x: number, y: number, z: number, kind: TreeKind) => voxels.push({ x, y, z, kind, shade: hash3(x, y, z, 4) });
+const SHAPE_SCALE = 0.85; // the mockup's proportions at full TS overshoot the slab ~1.4x
 
-  const trunkHeight = Math.round(9 * TS), tw = TS > 1.25 ? 1 : 0;
-  for (let y = 0; y < trunkHeight; y++) for (let x = -tw; x <= tw; x++) for (let z = -tw; z <= tw; z++) add(x, y + 0.5, z, "trunk");
-  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (let i = 1; i <= 2; i++) add(dx * (tw + i), 0.3, dz * (tw + i), "root");
-  for (const [dx, dz, len] of [[1, 0, 5], [-1, 0, 4], [0, 1, 4], [0, -1, 5], [1, 1, 3], [-1, -1, 3]]) {
-    for (let i = 1; i <= Math.round(len * TS * 0.8); i++) add(dx * (i + tw), trunkHeight - 3 + Math.floor(i * 0.6) + 0.5, dz * (i + tw), "trunk");
+type Clump = { x: number; y: number; z: number; r: number; front: number };
+
+export function pickSpecies(previous: Species | null, r: number): Species {
+  const pool = SPECIES.filter((s) => s !== previous);
+  return pool[Math.min(pool.length - 1, Math.floor(r * pool.length))];
+}
+
+export function growTree(species: Species, seed: number, size: number): Tree {
+  const cfg = VARIANTS[species], rnd = mulberry32(seed);
+  const TS = Math.max(1.1, Math.min(size, TREE_GROWTH_CAP) / 17), G = TS * SHAPE_SCALE; // G: mockup units -> modules
+  const segments: Segment[] = [], cards: LeafCard[] = [], clumps: Clump[] = [];
+  const seg = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, r0: number, r1: number) => {
+    if (segments.length < SEGMENT_BUDGET) segments.push({ x0, y0, z0, x1, y1, z1, r0, r1 });
+  };
+
+  // Trunk first, so segments[0] is the base on the slab; the radius curves in like the mockup's quadratic outline.
+  const trunkHeight = cfg.trunkH * G, tw = cfg.trunkW * G;
+  const trunkR = (y: number) => tw * (0.45 + 0.55 * (1 - y / trunkHeight) ** 2) * 0.6;
+  const rows = Math.ceil(trunkHeight);
+  for (let i = 0; i < rows; i++) {
+    const y0 = (i / rows) * trunkHeight, y1 = ((i + 1) / rows) * trunkHeight;
+    seg(0, y0, 0, 0, y1, 0, trunkR(y0), trunkR(y1));
+  }
+  const roots = 5 + Math.floor(rnd() * 2), rootA = rnd() * Math.PI * 2;
+  for (let i = 0; i < roots; i++) {
+    const a = rootA + (i / roots) * Math.PI * 2 + (rnd() - 0.5) * 0.5, reach = tw * (1.4 + rnd() * 0.8);
+    seg(0, tw * 0.7, 0, Math.cos(a) * reach, 0, Math.sin(a) * reach, trunkR(0) * 0.7, 0.08 * G);
   }
 
-  const s = TS * CLUMP_SCALE;
-  const clumps = BASE.map(([x, y, z, r]) => [x * s, trunkHeight + (y - 12) * s, z * s, r * s]);
-  const crown = new Set<string>();
-  const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
-  const R = Math.ceil(11 * TS), yMax = trunkHeight + 14 * TS;
-  for (let y = trunkHeight - 4; y < yMax; y++) for (let z = -R; z <= R; z++) for (let x = -R; x <= R; x++) {
-    let best = 9;
-    for (const [cx, cy, cz, r] of clumps) best = Math.min(best, Math.hypot((x - cx) / r, (y - cy) / (r * 0.7), (z - cz) / r));
-    if (best < 1 && (best < 0.86 || hash3(x, y, z, 1) < 0.5)) crown.add(key(x, y, z));
-  }
-  for (const k of crown) {
-    const [x, y, z] = k.split(",").map(Number);
-    if (!FACES.every(([a, b, c]) => crown.has(key(x + a, y + b, z + c)))) add(x, y + 0.5, z, "leaf");
-  }
-  for (let i = 0; i < 22; i++) {
-    const a = i * 2.39, r = R * (0.55 + hash3(i, 0, 0, 3) * 0.3), x = Math.round(Math.cos(a) * r), z = Math.round(Math.sin(a) * r);
-    let y0: number | null = null;
-    for (let y = trunkHeight - 4; y < yMax; y++) if (crown.has(key(x, y, z))) { y0 = y; break; }
-    if (y0 === null) continue;
-    for (let k = 1; k <= 2 + Math.floor(hash3(i, 1, 0, 3) * 6); k++) add(x, y0 - k + 0.5, z, "vine");
+  // e is the mockup's angle measured up from horizontal along azimuth az (e > PI/2 leans back over the trunk).
+  const limb = (x: number, y: number, z: number, az: number, e: number, len: number, width: number, depth: number) => {
+    const dir = (a: number, el: number, l: number) => [Math.cos(el) * Math.cos(a) * l, Math.sin(el) * l, Math.cos(el) * Math.sin(a) * l];
+    const [dx, dy, dz] = dir(az, e, len), [cx, cy, cz] = dir(az, e + cfg.bend, len * 0.5);
+    const x2 = x + dx, y2 = Math.max(0.5, y + dy), z2 = z + dz;
+    const n = depth >= cfg.depth ? 3 : 2;
+    let px = x, py = y, pz = z;
+    for (let k = 1; k <= n; k++) {
+      const t = k / n, u = 1 - t; // quadratic Bezier through the bent control point
+      const qx = u * u * x + 2 * u * t * (x + cx) + t * t * x2, qy = u * u * y + 2 * u * t * (y + cy) + t * t * y2, qz = u * u * z + 2 * u * t * (z + cz) + t * t * z2;
+      seg(px, py, pz, qx, Math.max(0, qy), qz, (width / 2) * (1 - 0.4 * (k - 1) / n), (width / 2) * (1 - 0.4 * k / n));
+      px = qx; py = Math.max(0, qy); pz = qz;
+    }
+    if (depth === 0) { clumps.push(clump(x2, y2, z2)); return; }
+    const kids = 2 + (rnd() < cfg.fork ? 1 : 0), roll = rnd() * Math.PI * 2;
+    for (let i = 0; i < kids; i++) {
+      const off = (i - (kids - 1) / 2) * cfg.split;
+      const e2 = e + off * Math.cos(roll) + (rnd() - 0.5) * 0.35, az2 = az + off * Math.sin(roll) * 1.2 + (rnd() - 0.5) * 0.35;
+      limb(x2, y2, z2, az2, e2 * (1 - cfg.lift) + (Math.PI / 2) * cfg.lift, len * (0.6 + rnd() * 0.12), width * 0.6, depth - 1);
+    }
+    if (rnd() < cfg.inner) clumps.push(clump(x2, y2, z2));
+  };
+  const clump = (x: number, y: number, z: number): Clump => ({ x, y, z, r: (cfg.clump + rnd() * cfg.clump * 0.7) * G, front: rnd() < 0.6 ? 0.12 : -0.15 });
+
+  // Seeded slot shuffles: azimuths stay evenly spread and heights stratified up the trunk, so no side or band is empty.
+  const shuffled = () => {
+    const a = Array.from({ length: cfg.limbs }, (_, i) => i);
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  };
+  const azSlot = shuffled(), hSlot = shuffled(), az0 = rnd() * Math.PI * 2;
+  for (let i = 0; i < cfg.limbs; i++) {
+    const t = cfg.limbs === 1 ? 0.5 : i / (cfg.limbs - 1);
+    const az = az0 + (azSlot[i] / cfg.limbs) * Math.PI * 2 + (rnd() - 0.5) * 0.5;
+    const e = Math.PI / 2 - Math.abs((t - 0.5) * cfg.fan) + (rnd() - 0.5) * 0.18;
+    const hy = trunkHeight * (cfg.limbLow + ((hSlot[i] + rnd()) / cfg.limbs) * (1 - cfg.limbLow));
+    limb((rnd() - 0.5) * tw * 0.5, hy, (rnd() - 0.5) * tw * 0.5, az, e, (cfg.limbLen + rnd() * 2) * G * (1 - Math.abs(t - 0.5) * cfg.taper), tw * 0.7, cfg.depth);
   }
 
-  const top = Math.max(...voxels.map((v) => v.y));
-  const crownRadius = Math.max(0, ...voxels.filter((v) => v.kind === "leaf").map((v) => Math.hypot(v.x, v.z)));
-  return { voxels, top, trunkHeight, crownRadius };
+  // Leaf cards: per-clump count scales with TS; if leaves + strands + specks overshoot the budget, leaves and
+  // strands thin by the same factor (whole strands dropped, so the ones kept stay full length).
+  const strandPlan = clumps.map(() => Array.from({ length: cfg.strands }, () => [Math.round(((2 + rnd() * cfg.strandLen) * G) / 0.5), rnd()]));
+  const specks = Math.round(cfg.specks * TS), want = Math.round(cfg.perClump * TS);
+  const strandTotal = strandPlan.flat().reduce((a, [n]) => a + n, 0), room = CARD_BUDGET - specks * clumps.length;
+  const thin = Math.min(1, room / (want * clumps.length + strandTotal));
+  const per = Math.max(1, Math.floor(want * thin));
+  const card = (x: number, y: number, z: number, shade: number, speck: boolean) => {
+    if (cards.length >= CARD_BUDGET) return;
+    const s = Math.min(0.999, Math.max(0, shade + (hash3(Math.round(x * 4), Math.round(y * 4), Math.round(z * 4), seed) - 0.5) * 0.3));
+    cards.push({ x, y: Math.max(0.3, y), z, rotY: rnd() * Math.PI * 2, tilt: (rnd() - 0.5) * 0.9, size: speck ? 0.3 : 0.55 + rnd() * 0.35, shade: s, speck });
+  };
+  clumps.forEach((c, ci) => {
+    for (let i = 0; i < per; i++) {
+      const a = rnd() * Math.PI * 2, v = rnd() * 2 - 1, d = Math.cbrt(rnd()) * c.r, h = Math.sqrt(1 - v * v);
+      const ox = Math.cos(a) * h * d, oy = v * d * cfg.flat, oz = Math.sin(a) * h * d;
+      card(c.x + ox, c.y + oy, c.z + oz, 0.45 + (oy / c.r) * 0.45 + ((ox - oz) / c.r) * 0.15 + c.front, false);
+    }
+    for (const [n, keep] of strandPlan[ci]) {
+      if (keep >= thin) continue;
+      let x = c.x + (rnd() - 0.5) * c.r * 1.4, z = c.z + (rnd() - 0.5) * c.r * 1.4;
+      const y0 = c.y - c.r * 0.3 * cfg.flat;
+      for (let j = 0; j < n && y0 - j * 0.5 > 0.5; j++) {
+        x += (rnd() - 0.5) * 0.3; z += (rnd() - 0.5) * 0.3;
+        card(x, y0 - j * 0.5, z, 0.5 - (j / n) * 0.4 + c.front * 0.8, false);
+      }
+    }
+    for (let i = 0; i < specks; i++) card(c.x + (rnd() - 0.5) * c.r * 1.6, c.y + (rnd() - 0.5) * c.r * cfg.flat, c.z + (rnd() - 0.5) * c.r * 1.6, rnd(), true);
+  });
+
+  let top = 0, crownRadius = 0;
+  for (const g of segments) top = Math.max(top, g.y0, g.y1);
+  for (const c of cards) {
+    top = Math.max(top, c.y);
+    if (!c.speck) crownRadius = Math.max(crownRadius, Math.hypot(c.x, c.z));
+  }
+  return { species, cards, segments, top, trunkHeight, crownRadius };
 }
