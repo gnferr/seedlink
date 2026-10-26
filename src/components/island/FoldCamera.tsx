@@ -64,8 +64,17 @@ export default function FoldCamera({ radius, top, size, insets, fold, orbit }: {
 
   /** Re-aim at the fit, keeping the user's orbit direction and zoom relative to the fit. */
   function refit() {
-    const cam = camera.current, c = controls.current;
-    if (!cam || from.current) return; // folded or mid-tween: the capture comes back on grow
+    const cam = camera.current, c = controls.current, s = from.current;
+    if (s && fold.current.cam === 1 && fitted.current !== null) {
+      // Fully folded (a new tree grows from here): move the capture onto the new fit, so the grow ends without a snap.
+      const rel = s.zoom / fitted.current;
+      s.position.sub(s.target).normalize().multiplyScalar(DISTANCE).add(pose.target);
+      s.target.copy(pose.target);
+      s.zoom = pose.zoom * rel;
+      fitted.current = pose.zoom;
+      return;
+    }
+    if (!cam || s) return; // mid-tween: the capture comes back on grow, then catches up
     const first = fitted.current === null || !c;
     const dir = first ? VIEW_DIR : new THREE.Vector3().subVectors(cam.position, c.target).normalize();
     const rel = first ? 1 : THREE.MathUtils.clamp(cam.zoom / fitted.current!, 0.6, 3);
@@ -80,7 +89,7 @@ export default function FoldCamera({ radius, top, size, insets, fold, orbit }: {
     }
     fitted.current = pose.zoom;
   }
-  useLayoutEffect(refit, [pose]);
+  useLayoutEffect(refit, [pose, fold]);
 
   useFrame(() => {
     const cam = camera.current, c = controls.current;

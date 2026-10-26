@@ -3,127 +3,160 @@
 import { useMemo, useRef, type RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { extraPose, voxelPose, type FoldPlan, type Pose } from "@/lib/fold";
-import { INK, leafShade, PALETTES } from "@/lib/palette";
+import { inkPose, piecePose, type FoldPiece, type FoldPlan, type Pose } from "@/lib/fold";
+import { INK, treeColours } from "@/lib/palette";
 import type { DarkModule } from "@/lib/qr";
 import { hash3 } from "@/lib/rng";
 import type { Season } from "@/lib/seasons";
 import type { Tree } from "@/lib/tree";
 import type { FoldState } from "./IslandScene";
+import { leafTexture } from "./leafTexture";
 
 const pose: Pose = { x: 0, y: 0, z: 0, sx: 1, sy: 1, sz: 1, rotY: 0, ink: 0 };
-const ROOT_HEIGHT = 0.6;
 const dummy = new THREE.Object3D();
+const card = new THREE.Object3D();
+card.rotation.order = "YXZ"; // turn about the trunk axis, then tilt
+const spin = new THREE.Quaternion();
+const UP = new THREE.Vector3(0, 1, 0);
+const dir = new THREE.Vector3();
 const colour = new THREE.Color();
-const ink = new THREE.Color(INK);
+// A collapsed instance still needs an invertible matrix for raycasts.
+const nz = (s: number) => s || 1e-4;
 
-function write(mesh: THREE.InstancedMesh, i: number, p: Pose, root = false) {
-  dummy.position.set(p.x, p.y, p.z);
-  dummy.rotation.set(0, p.rotY, p.rotY * 0.5);
-  // A collapsed instance still needs an invertible matrix for raycasts.
-  dummy.scale.set(p.sx || 1e-4, (p.sy || 1e-4) * (root ? ROOT_HEIGHT : 1), p.sz || 1e-4);
-  dummy.updateMatrix();
-  mesh.setMatrixAt(i, dummy.matrix);
-}
-
-/** The tree at the fold time in `fold` (0 = standing tree), plus the extra module blocks that rise from the slab. */
+/** The tree (leaf cards and branch segments) at the fold time in `fold`, and one ink block per dark module. */
 export default function TreeMesh({
   tree,
+  pieces,
   plan,
   dark,
   season,
   leaf,
   fold,
   reducedMotion,
-  meshRef,
+  groupRef,
 }: {
   tree: Tree;
+  pieces: FoldPiece[];
   plan: FoldPlan;
   dark: DarkModule[];
   season: Season;
   leaf: string | null;
   fold: RefObject<FoldState>;
   reducedMotion: boolean;
-  /** The tree voxels mesh, for tap raycasts. */
-  meshRef: RefObject<THREE.InstancedMesh | null>;
+  /** Cards and segments, for tap raycasts. */
+  groupRef: RefObject<THREE.Group | null>;
 }) {
-  const voxels = tree.voxels;
-  const extras = useRef<THREE.InstancedMesh>(null);
-  const last = useRef<{ t: number; colours: unknown; mesh: unknown; extras: unknown; sway: boolean }>({ t: NaN, colours: null, mesh: null, extras: null, sway: false });
+  const { cards, segments } = tree;
+  const cardMesh = useRef<THREE.InstancedMesh>(null);
+  const segMesh = useRef<THREE.InstancedMesh>(null);
+  const inkMesh = useRef<THREE.InstancedMesh>(null);
+  const last = useRef({ t: NaN, look: null as unknown, plan: null as unknown, meshes: [] as unknown[], sway: false });
+  const map = useMemo(() => leafTexture(), []);
 
-  const colours = useMemo(() => {
-    const p = PALETTES[season];
-    const base = leaf ?? p.leaf;
-    const leaves = new Set(voxels.filter((v) => v.kind === "leaf").map((v) => `${v.x},${v.y},${v.z}`));
-    return voxels.map((v) => {
-      const c = new THREE.Color();
-      if (v.kind === "trunk" || v.kind === "root") return c.set(p.trunk).multiplyScalar(0.8 + v.shade * 0.3);
-      // Sunlit: no leaf voxel directly above.
-      const sunlit = v.kind === "leaf" && !leaves.has(`${v.x},${v.y + 1},${v.z}`);
-      c.set(leafShade(base, v.shade, sunlit));
-      if (v.kind === "vine") c.multiplyScalar(0.85);
-      if (season === "WINTER" && v.shade > 0.55) c.set("#ffffff");
-      else if (season !== "WINTER" && hash3(v.x, v.y, v.z, 11) > 0.975) c.set("#ecf27a");
-      return c;
+  // Per-instance colour and the cards shown this season (beyond leafKeep, or specks with no colour, are hidden).
+  const look = useMemo(() => {
+    const c = treeColours(season, tree.species, leaf);
+    const cardColour = cards.map((k) => k.speck ? c.speck ?? "#000" : c.leaves[Math.min(c.leaves.length - 1, Math.floor(k.shade * c.leaves.length))]);
+    const shown = cards.map((k, i) => (k.speck ? c.speck !== null : hash3(i, 17, 3, 29) < c.leafKeep));
+    const segColour = segments.map((g, j) => {
+      const len = Math.hypot(g.x1 - g.x0, g.y1 - g.y0, g.z1 - g.z0), r = (g.r0 + g.r1) / 2;
+      // Snow lies on the flatter limbs; birch bark gets dark marks; thin limbs are twig-coloured.
+      if (c.snowCap && Math.abs(g.y1 - g.y0) < len * 0.6) return c.snowCap;
+      if (c.barkMarks && r > 0.15 && hash3(j, 5, 9, 31) < 0.3) return c.barkMarks;
+      return r < 0.18 ? c.twig : c.bark;
     });
-  }, [voxels, season, leaf]);
+    return { cardColour, shown, segColour };
+  }, [season, leaf, tree.species, cards, segments]);
 
-  // Matrices and ink colour every frame while 0 < t < 1, once on reaching 0 or 1; leaves also sway in the tree state.
+  // Segment rest shape: unit box -> length along the limb, width from its radii.
+  const segBase = useMemo(() => segments.map((g) => {
+    dir.set(g.x1 - g.x0, g.y1 - g.y0, g.z1 - g.z0);
+    const len = dir.length() || 1e-3;
+    return { len, width: g.r0 + g.r1, q: new THREE.Quaternion().setFromUnitVectors(UP, dir.normalize()) };
+  }), [segments]);
+
+  // Matrices every frame while 0 < t < 1, once on reaching 0 or 1 or on a change; cards also sway in the tree state.
   useFrame(({ clock }) => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
+    const cm = cardMesh.current, sm = segMesh.current, im = inkMesh.current;
+    if (!cm || !sm || !im) return;
     const { t, poke } = fold.current;
     const sway = t === 0 && !reducedMotion;
     const l = last.current;
-    const full = t !== l.t || colours !== l.colours || mesh !== l.mesh || extras.current !== l.extras;
+    const recolour = look !== l.look || cm !== l.meshes[0] || sm !== l.meshes[1];
+    const full = t !== l.t || recolour || plan !== l.plan || im !== l.meshes[2];
     if (!full && !sway && !l.sway) return;
-    const time = clock.elapsedTime;
-    for (let i = 0; i < voxels.length; i++) {
-      const v = voxels[i];
-      voxelPose(plan, voxels, dark, i, t, pose);
-      if (sway && (v.kind === "leaf" || v.kind === "vine")) {
-        const w = (v.y / tree.top) ** 2;
-        pose.x += Math.sin(time * 1.3 + v.x * 0.3 + v.z * 0.2) * 0.12 * w + Math.sin(time * 22) * poke * 0.3 * w;
-        pose.z += Math.cos(time * 1.1 + v.z * 0.3) * 0.08 * w;
+    const time = clock.elapsedTime, n = cards.length;
+
+    for (let i = 0; i < n; i++) {
+      const k = cards[i];
+      piecePose(plan, pieces, dark, i, t, pose);
+      if (sway && !k.speck) {
+        const w = (k.y / tree.top) ** 2;
+        pose.x += Math.sin(time * 1.3 + k.x * 0.3 + k.z * 0.2) * 0.12 * w + Math.sin(time * 22) * poke * 0.3 * w;
+        pose.z += Math.cos(time * 1.1 + k.z * 0.3) * 0.08 * w;
       }
-      write(mesh, i, pose, v.kind === "root");
-      if (full) mesh.setColorAt(i, colour.copy(colours[i]).lerp(ink, pose.ink));
+      card.position.set(pose.x, pose.y, pose.z);
+      card.rotation.set(k.tilt, k.rotY + pose.rotY, pose.rotY * 0.5);
+      card.scale.setScalar(nz(look.shown[i] ? k.size * pose.sx : 0));
+      card.updateMatrix();
+      cm.setMatrixAt(i, card.matrix);
+      if (recolour) cm.setColorAt(i, colour.set(look.cardColour[i]));
     }
-    mesh.instanceMatrix.needsUpdate = true;
-    if (full && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    const ex = extras.current;
-    if (ex && full) {
-      for (let i = 0; i < plan.extras.length; i++) {
-        write(ex, i, extraPose(dark[plan.extras[i]], t, pose));
-        ex.setColorAt(i, ink);
+    cm.instanceMatrix.needsUpdate = true;
+    if (recolour && cm.instanceColor) cm.instanceColor.needsUpdate = true;
+
+    if (full) {
+      for (let j = 0; j < segments.length; j++) {
+        const b = segBase[j];
+        piecePose(plan, pieces, dark, n + j, t, pose);
+        dummy.position.set(pose.x, pose.y, pose.z);
+        dummy.quaternion.copy(b.q).premultiply(spin.setFromAxisAngle(UP, pose.rotY));
+        dummy.scale.set(nz(b.width * pose.sx), nz(b.len * pose.sx), nz(b.width * pose.sx));
+        dummy.updateMatrix();
+        sm.setMatrixAt(j, dummy.matrix);
+        if (recolour) sm.setColorAt(j, colour.set(look.segColour[j]));
       }
-      ex.instanceMatrix.needsUpdate = true;
-      if (ex.instanceColor) ex.instanceColor.needsUpdate = true;
-    }
-    // Taps only raycast at rest, so the bounds are refreshed on arrival, not mid-flight.
-    if (full && (t === 0 || t === 1)) {
-      mesh.computeBoundingSphere();
-      ex?.computeBoundingSphere();
+      sm.instanceMatrix.needsUpdate = true;
+      if (recolour && sm.instanceColor) sm.instanceColor.needsUpdate = true;
+
+      for (let j = 0; j < dark.length; j++) {
+        inkPose(plan, pieces, dark, j, t, pose);
+        dummy.position.set(pose.x, pose.y, pose.z);
+        dummy.rotation.set(0, pose.rotY, pose.rotY * 0.5);
+        dummy.scale.set(nz(pose.sx), nz(pose.sy), nz(pose.sz));
+        dummy.updateMatrix();
+        im.setMatrixAt(j, dummy.matrix);
+      }
+      im.instanceMatrix.needsUpdate = true;
+      // Taps only raycast at rest, so the bounds are refreshed on arrival, not mid-flight.
+      if (t === 0 || t === 1) {
+        cm.computeBoundingSphere();
+        sm.computeBoundingSphere();
+      }
     }
     l.t = t;
-    l.colours = colours;
-    l.mesh = mesh;
-    l.extras = ex;
+    l.look = look;
+    l.plan = plan;
+    l.meshes = [cm, sm, im];
     l.sway = sway;
   });
 
   return (
     <>
-      <instancedMesh key={`b${voxels.length}`} ref={meshRef} args={[undefined, undefined, voxels.length]} frustumCulled={false}>
-        <boxGeometry />
-        <meshLambertMaterial />
-      </instancedMesh>
-      {plan.extras.length > 0 && (
-        <instancedMesh key={`e${plan.extras.length}`} ref={extras} args={[undefined, undefined, plan.extras.length]}>
+      <group ref={groupRef}>
+        <instancedMesh key={`c${cards.length}`} ref={cardMesh} args={[undefined, undefined, cards.length]} frustumCulled={false}>
+          <planeGeometry />
+          <meshLambertMaterial map={map} alphaTest={0.5} side={THREE.DoubleSide} />
+        </instancedMesh>
+        <instancedMesh key={`s${segments.length}`} ref={segMesh} args={[undefined, undefined, segments.length]} frustumCulled={false}>
           <boxGeometry />
           <meshLambertMaterial />
         </instancedMesh>
-      )}
+      </group>
+      <instancedMesh key={`i${dark.length}`} ref={inkMesh} args={[undefined, undefined, dark.length]} frustumCulled={false}>
+        <boxGeometry />
+        <meshBasicMaterial color={INK} />
+      </instancedMesh>
     </>
   );
 }

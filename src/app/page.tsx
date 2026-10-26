@@ -61,6 +61,8 @@ export default function Home() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [sceneReady, setSceneReady] = useState(false);
   const [sceneFailed, setSceneFailed] = useState(false);
+  const [treeInfo, setTreeInfo] = useState<{ species: string; seed: number } | null>(null);
+  const onTree = useCallback((species: string, seed: number) => setTreeInfo({ species, seed }), []);
   const reducedMotion = useReducedMotion();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const mainRef = useRef<HTMLElement>(null);
@@ -215,7 +217,7 @@ export default function Home() {
     <main ref={mainRef} className="relative flex min-h-0 flex-1 overflow-hidden bg-[rgb(16_14_38)]">
       <h1 className="sr-only">Sky Island</h1>
       {/* Overlays stay siblings of role="img": its children are pruned from the accessibility tree. */}
-      <div role="img" aria-label={`A floating island whose tree folds into the QR code for "${qr.text}".`} data-phase={phase} className="absolute inset-0">
+      <div role="img" aria-label={`A floating island whose tree folds into the QR code for "${qr.text}".`} data-phase={phase} data-species={treeInfo?.species} data-tree-seed={treeInfo?.seed} className="absolute inset-0">
         {/* Mount once the controls are measured, so the first fit already leaves room for them. */}
         {frame.width > 0 && (
           <SceneBoundary onFail={() => setSceneFailed(true)}>
@@ -230,6 +232,7 @@ export default function Home() {
               onPhase={setPhase}
               onTap={onTap}
               onCanvasReady={onCanvasReady}
+              onTree={onTree}
             />
           </SceneBoundary>
         )}

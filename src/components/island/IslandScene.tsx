@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { easeInOutCubic, FOLD_SECONDS, planFold } from "@/lib/fold";
+import { easeInOutCubic, FOLD_SECONDS, foldPieces, planFold } from "@/lib/fold";
 import { growIsland } from "@/lib/island";
 import { isTap, nextFoldTarget } from "@/lib/pointer";
 import { darkModules, type QrMatrix } from "@/lib/qr";
@@ -11,7 +11,7 @@ import { hashString } from "@/lib/rng";
 import type { ScanInsets } from "@/lib/scanFit";
 import type { Season } from "@/lib/seasons";
 import type { FoldPhase } from "@/lib/status";
-import { growTree } from "@/lib/tree";
+import { growTree, pickSpecies, type Species } from "@/lib/tree";
 import FoldCamera from "./FoldCamera";
 import IslandMesh from "./IslandMesh";
 import Particles from "./Particles";
@@ -26,6 +26,7 @@ export type IslandSceneProps = {
   onPhase(phase: FoldPhase): void; // "folded" is reported only once the camera has settled top-down
   onTap(action: "fold" | "grow" | "poke"): void;
   onCanvasReady(canvas: HTMLCanvasElement): void;
+  onTree(species: Species, seed: number): void; // a new random tree began growing
 };
 
 /** Shared per-frame fold state: `t` drives the blocks, `cam` the camera tween (both 0 = tree, 1 = folded). */
@@ -130,8 +131,13 @@ function Taps({ phase, tree, ground, onTap }: {
   return null;
 }
 
+/** A grow start draws a new species (never the previous one) and seed. */
+type Grow = { matrix: QrMatrix; folded: boolean; species: Species; seed: number };
+const draw = (previous: Species | null, matrix: QrMatrix, folded: boolean): Grow =>
+  ({ matrix, folded, species: pickSpecies(previous, Math.random()), seed: Math.floor(Math.random() * 2 ** 31) });
+
 export default function IslandScene(props: IslandSceneProps) {
-  const { text, matrix, season, leaf, folded, reducedMotion, insets, onPhase, onTap, onCanvasReady } = props;
+  const { text, matrix, season, leaf, folded, reducedMotion, insets, onPhase, onTap, onCanvasReady, onTree } = props;
   const [phase, setPhase] = useState<FoldPhase>(folded ? "folded" : "tree");
   const fold = useRef<FoldState>({ t: folded ? 1 : 0, cam: folded ? 1 : 0, poke: 0 });
   // The poke shake is the scene's; sound and everything else is the page's call.
@@ -140,14 +146,24 @@ export default function IslandScene(props: IslandSceneProps) {
     onTap(action);
   }, [onTap, reducedMotion]);
 
-  const world = useMemo(() => {
-    const seed = hashString(text);
-    const dark = darkModules(matrix);
-    const tree = growTree(matrix.size);
-    return { dark, tree, island: growIsland(seed, matrix.size), plan: planFold(tree.voxels, tree.top, dark, seed) };
-  }, [text, matrix]);
+  // A grow starts on mount, on a new matrix (new link) or when the target unfolds; nothing else regrows the tree.
+  const [grow, setGrow] = useState(() => draw(null, matrix, folded));
+  if (grow.matrix !== matrix || (grow.folded && !folded)) setGrow(draw(grow.species, matrix, folded));
+  else if (grow.folded !== folded) setGrow({ ...grow, folded });
+  const { species, seed: treeSeed } = grow;
+  useEffect(() => onTree(species, treeSeed), [species, treeSeed, onTree]);
 
-  const treeRef = useRef<THREE.InstancedMesh>(null);
+  const dark = useMemo(() => darkModules(matrix), [matrix]);
+  const island = useMemo(() => growIsland(hashString(text), matrix.size), [text, matrix.size]);
+  const tree = useMemo(() => growTree(species, treeSeed, matrix.size), [species, treeSeed, matrix.size]);
+  // Winter changes the carriers (bare cards never carry) but never the tree.
+  const winter = season === "WINTER";
+  const foldPlan = useMemo(() => {
+    const pieces = foldPieces(tree, winter);
+    return { pieces, plan: planFold(pieces, tree.top, dark, treeSeed) };
+  }, [tree, winter, dark, treeSeed]);
+
+  const treeRef = useRef<THREE.Group>(null);
   const groundRef = useRef<THREE.Group>(null);
   const bobRef = useRef<THREE.Group>(null);
   // Chunky half-resolution pixels for the tree; the folded code renders at the full device ratio.
@@ -167,12 +183,12 @@ export default function IslandScene(props: IslandSceneProps) {
       <hemisphereLight args={["#b8b0ff", "#2a2140", 1.1]} />
       <directionalLight color="#fff4e0" intensity={1.6} position={[30, 50, -10]} />
       <directionalLight color="#9ec5ff" intensity={0.5} position={[-30, 20, 30]} />
-      <Timeline foldRef={fold} folded={folded} reducedMotion={reducedMotion} world={world} bobRef={bobRef} ratio={ratio} setPhase={setPhase} onPhase={onPhase} />
-      <FoldCamera radius={world.island.radius} top={world.tree.top} size={matrix.size} insets={insets} fold={fold} orbit={phase === "tree"} />
+      <Timeline foldRef={fold} folded={folded} reducedMotion={reducedMotion} world={tree} bobRef={bobRef} ratio={ratio} setPhase={setPhase} onPhase={onPhase} />
+      <FoldCamera radius={island.radius} top={tree.top} size={matrix.size} insets={insets} fold={fold} orbit={phase === "tree"} />
       <group ref={bobRef}>
-        <IslandMesh island={world.island} dark={world.dark} size={matrix.size} season={season} fold={fold} reducedMotion={reducedMotion} groupRef={groundRef} />
-        <TreeMesh tree={world.tree} plan={world.plan} dark={world.dark} season={season} leaf={leaf} fold={fold} reducedMotion={reducedMotion} meshRef={treeRef} />
-        {!reducedMotion && phase !== "folded" && <Particles tree={world.tree} season={season} fold={fold} />}
+        <IslandMesh island={island} dark={dark} size={matrix.size} season={season} fold={fold} reducedMotion={reducedMotion} groupRef={groundRef} />
+        <TreeMesh tree={tree} pieces={foldPlan.pieces} plan={foldPlan.plan} dark={dark} season={season} leaf={leaf} fold={fold} reducedMotion={reducedMotion} groupRef={treeRef} />
+        {!reducedMotion && phase !== "folded" && <Particles tree={tree} season={season} fold={fold} />}
       </group>
       <Taps phase={phase} tree={treeRef} ground={groundRef} onTap={tap} />
     </Canvas>
