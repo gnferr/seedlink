@@ -1,36 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Seedlink
 
-## Getting Started
+Grow your link into a tree. Type a URL and a pixel tree grows on a floating island shaped by that link. Tap the tree and it folds into a scannable QR code; tap again and it grows back.
 
-First, run the development server:
+## Features
+
+- **A tree that becomes a code.** The tree's leaves and branches fly down and become the QR code's dark modules.
+- **Six tree species**, picked at random on every grow: oak, lush oak, willow, acacia, birch and cherry.
+- **Seasons and leaf colours.**
+- **A pixel sky with a day cycle.** A time-of-day slider moves the sun and moon. It starts at your local time.
+- **The same island for every link.** Short and long links grow the same size island; longer links just get smaller modules.
+- **Scan check before Save.** The folded code is checked in the browser, and Save explains why if it won't scan.
+- **Plain PNG export.** Save downloads a clean QR image: dark ink on white, with the quiet zone.
+
+Everything runs in the browser. There is no backend and no account.
+
+## Tech
+
+Next.js 16, React 19, React Three Fiber and three.js, `qrcode` (error correction level H). Pure logic lives in `src/lib` and is tested with Node's built-in test runner; the UI is tested with Playwright.
+
+## Run it
+
+Needs Node 22.6 or newer (the unit tests use `--experimental-strip-types`).
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Test
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm test
+npm run test:e2e
+npx tsc --noEmit
+npm run lint
+```
 
-## Learn More
+## Deploy
 
-To learn more about Next.js, take a look at the following resources:
+It deploys to Vercel with the default Next.js settings: import the repository and deploy.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Docs
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Design specs and implementation plans are in `docs/superpowers/`. Product notes are in `PRODUCT.md`.
