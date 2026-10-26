@@ -341,3 +341,112 @@ async function worstTextContrast(page: Page) {
     return worst;
   });
 }
+
+// ---- random species and the day cycle ----
+const scene = (page: Page) => page.getByRole("img", { name: /floating island/ });
+const slider = (page: Page) => page.getByRole("slider", { name: "Time of day" });
+const attr = (page: Page, a: string) => scene(page).getAttribute(a);
+const setTime = (page: Page, v: number) => slider(page).fill(String(v));
+async function grow(page: Page) {
+  await page.getByRole("button", { name: "Grow the tree" }).click();
+  await expect(scene(page)).toHaveAttribute("data-phase", "tree", { timeout: 20_000 });
+}
+
+test("each grow plants a different tree and species vary", async ({ page }) => {
+  await ready(page);
+  const species = new Set([await attr(page, "data-species")]);
+  for (let i = 0; i < 3; i++) {
+    const before = await attr(page, "data-tree-seed");
+    await fold(page);
+    await grow(page);
+    expect(await attr(page, "data-tree-seed")).not.toBe(before);
+    species.add(await attr(page, "data-species"));
+  }
+  expect(species.size).toBeGreaterThanOrEqual(2);
+});
+
+test("season, leaf colour and time never regrow the tree", async ({ page }) => {
+  await ready(page);
+  const seed = await attr(page, "data-tree-seed");
+  await openPanel(page);
+  await page.getByRole("radio", { name: "Autumn" }).click();
+  await page.locator('button[aria-label^="Leaf colour"][aria-pressed="false"]').first().click();
+  await setTime(page, 800);
+  expect(await attr(page, "data-tree-seed")).toBe(seed);
+  await fold(page);
+  if (!(await page.locator("#season-panel").count())) await openPanel(page); // the fold click closes the panel
+  await page.getByRole("radio", { name: "Winter" }).click();
+  await page.locator('button[aria-label^="Leaf colour"][aria-pressed="false"]').first().click();
+  await setTime(page, 100);
+  await expect(chip(page)).toHaveText(VERDICT, { timeout: 20_000 });
+  expect(await attr(page, "data-tree-seed")).toBe(seed);
+});
+
+test("the Time of day slider exists and ArrowRight changes its text", async ({ page }) => {
+  await ready(page);
+  await openPanel(page);
+  await expect(slider(page)).toBeVisible();
+  const before = await slider(page).getAttribute("aria-valuetext");
+  await slider(page).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(slider(page)).not.toHaveAttribute("aria-valuetext", before!);
+});
+
+// Fixed clock freezes Date only; rAF and timers keep running, so the scene still animates.
+for (const [h, m, text] of [[14, 30, "Day, 14:30"], [3, 0, "Night, 23:00"]] as const) {
+  test(`clock start: ${h}:${String(m).padStart(2, "0")} local reads ${text}`, async ({ page }) => {
+    await page.clock.setFixedTime(new Date(2026, 9, 26, h, m));
+    await ready(page);
+    await openPanel(page);
+    await expect(slider(page)).toHaveAttribute("aria-valuetext", new RegExp(`^${text}`));
+  });
+}
+
+for (const v of [0, 1000]) {
+  test(`folds to a full verdict with the slider at ${v}`, async ({ page }) => {
+    await ready(page);
+    await openPanel(page);
+    await setTime(page, v);
+    await fold(page);
+    await enabled(page);
+  });
+}
+
+test("dragging time while folded disables Save until the new verdict", async ({ page }) => {
+  await ready(page);
+  await fold(page);
+  await openPanel(page);
+  await setTime(page, 1000);
+  await disabled(page);
+  await expect(chip(page)).toHaveText(VERDICT, { timeout: 20_000 });
+  await enabled(page);
+});
+
+test("the Night PNG has a neutral backdrop and still keeps finders and quiet zone", async ({ page }) => {
+  await ready(page);
+  await openPanel(page);
+  await setTime(page, 1000);
+  await fold(page);
+  const [dl] = await Promise.all([page.waitForEvent("download"), save(page).click()]);
+  const url = `data:image/png;base64,${readFileSync((await dl.path())!).toString("base64")}`;
+  const corners = await page.evaluate(async (src) => {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height;
+    const ctx = c.getContext("2d", { willReadFrequently: true })!;
+    ctx.drawImage(img, 0, 0);
+    return [[0, 0], [img.width - 1, 0], [0, img.height - 1], [img.width - 1, img.height - 1]].map(([x, y]) => [...ctx.getImageData(x, y, 1, 1).data.slice(0, 3)]);
+  }, url);
+  for (const px of corners) px.forEach((v, i) => expect(Math.abs(v - [0xec, 0xe8, 0xf2][i])).toBeLessThanOrEqual(6));
+});
+
+test("Winter at the Night end folds to a full verdict", async ({ page }) => {
+  await ready(page);
+  await openPanel(page);
+  await page.getByRole("radio", { name: "Winter" }).click();
+  await setTime(page, 1000);
+  await fold(page);
+});
