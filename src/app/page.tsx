@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import ControlPill from "@/components/controls/ControlPill";
 import HintChip from "@/components/controls/HintChip";
 import SeasonPanel from "@/components/controls/SeasonPanel";
+import { timeFromClock } from "@/lib/daycycle";
 import { generateMatrix, QUIET_ZONE, type QrMatrix } from "@/lib/qr";
 import { exportPng } from "@/lib/exporters";
 import { useReducedMotion } from "@/lib/useReducedMotion";
@@ -51,6 +52,13 @@ export default function Home() {
   const [tooLong, setTooLong] = useState(false);
   const [season, setSeasonState] = useState<Season>("SUMMER");
   const [leaf, setLeaf] = useState<string | null>(null);
+  // shortcut: local time fixed at mount; Task 8 adds the slider. Read only in the browser: the server prerender
+  // must not read the clock, and the value only reaches the client-only scene, so hydration cannot mismatch.
+  const [time] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    const d = new Date();
+    return timeFromClock(d.getHours(), d.getMinutes());
+  });
   const [folded, setFolded] = useState(false);
   const [phase, setPhase] = useState<FoldPhase>("tree");
   // `frame` is the framing the check was graded under; it is not part of verifyKey.
@@ -226,6 +234,7 @@ export default function Home() {
               matrix={qr.matrix}
               season={season}
               leaf={leaf}
+              time={time}
               folded={folded}
               reducedMotion={reducedMotion}
               insets={frame.insets}

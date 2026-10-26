@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { easeInOutCubic, FOLD_SECONDS, foldPieces, planFold } from "@/lib/fold";
-import { timeFromClock } from "@/lib/daycycle";
 import { growIsland } from "@/lib/island";
 import { isTap, nextFoldTarget } from "@/lib/pointer";
 import { darkModules, type QrMatrix } from "@/lib/qr";
@@ -17,10 +16,12 @@ import FoldCamera from "./FoldCamera";
 import IslandMesh from "./IslandMesh";
 import Particles from "./Particles";
 import SkyDome from "./SkyDome";
+import SkyLights from "./SkyLights";
 import TreeMesh from "./TreeMesh";
 
 export type IslandSceneProps = {
   text: string; matrix: QrMatrix; season: Season; leaf: string | null;
+  time: number;                  // 0 = 06:00 .. 1 = 23:00 (see daycycle)
   folded: boolean;               // target state owned by the page
   reducedMotion: boolean;
   insets: ScanInsets;            // CSS px covered by the controls (top, bottom)
@@ -138,7 +139,7 @@ const draw = (previous: Species | null, matrix: QrMatrix, folded: boolean): Grow
   ({ matrix, folded, species: pickSpecies(previous, Math.random()), seed: Math.floor(Math.random() * 2 ** 31) });
 
 export default function IslandScene(props: IslandSceneProps) {
-  const { text, matrix, season, leaf, folded, reducedMotion, insets, onPhase, onTap, onCanvasReady, onTree } = props;
+  const { text, matrix, season, leaf, time, folded, reducedMotion, insets, onPhase, onTap, onCanvasReady, onTree } = props;
   const [phase, setPhase] = useState<FoldPhase>(folded ? "folded" : "tree");
   const fold = useRef<FoldState>({ t: folded ? 1 : 0, cam: folded ? 1 : 0, poke: 0 });
   // The poke shake is the scene's; sound and everything else is the page's call.
@@ -169,8 +170,6 @@ export default function IslandScene(props: IslandSceneProps) {
   const bobRef = useRef<THREE.Group>(null);
   // Chunky half-resolution pixels for the tree; the folded code renders at the full device ratio.
   const ratio = Math.min(2, window.devicePixelRatio || 1);
-  // shortcut: local time fixed at mount until Task 7 adds the time prop and slider.
-  const [time] = useState(() => { const d = new Date(); return timeFromClock(d.getHours(), d.getMinutes()); });
 
   return (
     <Canvas
@@ -183,9 +182,7 @@ export default function IslandScene(props: IslandSceneProps) {
       }}
     >
       <SkyDome time={time} />
-      <hemisphereLight args={["#b8b0ff", "#2a2140", 1.1]} />
-      <directionalLight color="#fff4e0" intensity={1.6} position={[30, 50, -10]} />
-      <directionalLight color="#9ec5ff" intensity={0.5} position={[-30, 20, 30]} />
+      <SkyLights time={time} fold={fold} radius={island.radius} reducedMotion={reducedMotion} />
       <Timeline foldRef={fold} folded={folded} reducedMotion={reducedMotion} world={tree} bobRef={bobRef} ratio={ratio} setPhase={setPhase} onPhase={onPhase} />
       <FoldCamera radius={island.radius} top={tree.top} size={matrix.size} insets={insets} fold={fold} orbit={phase === "tree"} />
       <group ref={bobRef}>
