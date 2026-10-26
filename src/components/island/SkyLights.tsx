@@ -45,7 +45,7 @@ export default function SkyLights({ time, fold, radius, reducedMotion }: {
   const hemi = useRef<THREE.HemisphereLight>(null);
   const key = useRef<THREE.DirectionalLight>(null);
   const glow = useRef<THREE.Sprite>(null);
-  const fogRef = useRef(new THREE.Fog(0xffffff, 1, 2));
+  const fogRef = useRef<THREE.Fog | null>(null); // made once, lazily
   const texture = useMemo(() => glowTexture(), []);
   const dir = useRef<THREE.Vector3 | null>(null);
 
@@ -91,16 +91,14 @@ export default function SkyLights({ time, fold, radius, reducedMotion }: {
     }
     k.intensity = mixTo(day.keyI, KEY_I, e);
 
-    // Fog only on the island's far underside, pushed out of reach as the fold closes; none at t = 1.
-    if (e >= 1) scene.fog = null;
-    else {
-      const push = (e / (1 - e)) * 400;
-      const fog = fogRef.current;
-      fog.color.copy(day.haze);
-      fog.near = 200 + radius + push;
-      fog.far = 200 + radius + 45 + push;
-      scene.fog = fog;
-    }
+    // Fog only on the island's far underside, pushed out of reach as the fold closes. It stays set (no shader
+    // recompiles); at t = 1 near lies beyond the camera's far plane, so the folded pad is unfogged.
+    const push = e >= 1 ? 1e9 : (e / (1 - e)) * 400;
+    const fog = (fogRef.current ??= new THREE.Fog(0xffffff, 1, 2));
+    fog.color.copy(day.haze);
+    fog.near = 200 + radius + push;
+    fog.far = 200 + radius + 45 + push;
+    if (scene.fog !== fog) scene.fog = fog;
 
     // Centred on the view, far behind the island: the island's depth hides it where they overlap.
     g.position.copy(camera.position).addScaledVector(camera.getWorldDirection(ahead), 600);

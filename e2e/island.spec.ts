@@ -381,7 +381,8 @@ test("season, leaf colour and time never regrow the tree", async ({ page }) => {
   await page.getByRole("radio", { name: "Autumn" }).click();
   await page.locator('button[aria-label^="Leaf colour"][aria-pressed="false"]').first().click();
   await setTime(page, 800);
-  expect(await attr(page, "data-tree-seed")).toBe(seed);
+  // watch a short window so a regrow a frame or two late is still caught
+  for (let i = 0; i < 5; i++) { expect(await attr(page, "data-tree-seed")).toBe(seed); await page.waitForTimeout(100); }
   await fold(page);
   if (!(await page.locator("#season-panel").count())) await openPanel(page); // the fold click closes the panel
   await page.getByRole("radio", { name: "Winter" }).click();

@@ -3,7 +3,7 @@
 import { useMemo, useRef, type RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { inkPose, piecePose, type FoldPiece, type FoldPlan, type Pose } from "@/lib/fold";
+import { cardShown, inkPose, piecePose, type FoldPiece, type FoldPlan, type Pose } from "@/lib/fold";
 import { INK, treeColours } from "@/lib/palette";
 import type { DarkModule } from "@/lib/qr";
 import { hash3 } from "@/lib/rng";
@@ -50,14 +50,14 @@ export default function TreeMesh({
   const cardMesh = useRef<THREE.InstancedMesh>(null);
   const segMesh = useRef<THREE.InstancedMesh>(null);
   const inkMesh = useRef<THREE.InstancedMesh>(null);
-  const last = useRef({ t: NaN, look: null as unknown, plan: null as unknown, meshes: [] as unknown[], sway: false });
+  const last = useRef({ t: NaN, look: null as unknown, plan: null as unknown, cm: null as unknown, sm: null as unknown, im: null as unknown, sway: false });
   const map = useMemo(() => leafTexture(), []);
 
   // Per-instance colour and the cards shown this season (beyond leafKeep, or specks with no colour, are hidden).
   const look = useMemo(() => {
     const c = treeColours(season, tree.species, leaf);
     const cardColour = cards.map((k) => k.speck ? c.speck ?? "#000" : c.leaves[Math.min(c.leaves.length - 1, Math.floor(k.shade * c.leaves.length))]);
-    const shown = cards.map((k, i) => (k.speck ? c.speck !== null : hash3(i, 17, 3, 29) < c.leafKeep));
+    const shown = cards.map((k, i) => (k.speck ? c.speck !== null : cardShown(i, c.leafKeep)));
     const segColour = segments.map((g, j) => {
       const len = Math.hypot(g.x1 - g.x0, g.y1 - g.y0, g.z1 - g.z0), r = (g.r0 + g.r1) / 2;
       // Snow lies on the flatter limbs; birch bark gets dark marks; thin limbs are twig-coloured.
@@ -82,8 +82,8 @@ export default function TreeMesh({
     const { t, poke } = fold.current;
     const sway = t === 0 && !reducedMotion;
     const l = last.current;
-    const recolour = look !== l.look || cm !== l.meshes[0] || sm !== l.meshes[1];
-    const full = t !== l.t || recolour || plan !== l.plan || im !== l.meshes[2];
+    const recolour = look !== l.look || cm !== l.cm || sm !== l.sm;
+    const full = t !== l.t || recolour || plan !== l.plan || im !== l.im;
     if (!full && !sway && !l.sway) return;
     const time = clock.elapsedTime, n = cards.length;
 
@@ -137,7 +137,7 @@ export default function TreeMesh({
     l.t = t;
     l.look = look;
     l.plan = plan;
-    l.meshes = [cm, sm, im];
+    l.cm = cm; l.sm = sm; l.im = im;
     l.sway = sway;
   });
 

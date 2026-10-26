@@ -5,6 +5,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { easeInOutCubic, FOLD_SECONDS, foldPieces, planFold } from "@/lib/fold";
 import { growIsland } from "@/lib/island";
+import { treeColours } from "@/lib/palette";
 import { isTap, nextFoldTarget } from "@/lib/pointer";
 import { darkModules, type QrMatrix } from "@/lib/qr";
 import { hashString } from "@/lib/rng";
@@ -48,16 +49,19 @@ function Exporter({ onExportReady }: { onExportReady: IslandSceneProps["onExport
       const background = scene.background;
       hidden.forEach((o) => (o.visible = false));
       scene.background = BACKDROP;
-      gl.render(scene, camera);
-      const src = gl.domElement;
-      const copy = document.createElement("canvas");
-      copy.width = src.width;
-      copy.height = src.height;
-      copy.getContext("2d")?.drawImage(src, 0, 0);
-      scene.background = background;
-      hidden.forEach((o) => (o.visible = true));
-      gl.render(scene, camera); // the preserved buffer shows the sky again before the next frame
-      return copy;
+      try {
+        gl.render(scene, camera);
+        const src = gl.domElement;
+        const copy = document.createElement("canvas");
+        copy.width = src.width;
+        copy.height = src.height;
+        copy.getContext("2d")?.drawImage(src, 0, 0);
+        return copy;
+      } finally {
+        scene.background = background;
+        hidden.forEach((o) => (o.visible = true));
+        gl.render(scene, camera); // the preserved buffer shows the sky again before the next frame
+      }
     });
   }, [gl, scene, camera, onExportReady]);
   return null;
@@ -190,12 +194,12 @@ export default function IslandScene(props: IslandSceneProps) {
   const dark = useMemo(() => darkModules(matrix), [matrix]);
   const island = useMemo(() => growIsland(hashString(text), matrix.size), [text, matrix.size]);
   const tree = useMemo(() => growTree(species, treeSeed, matrix.size), [species, treeSeed, matrix.size]);
-  // Winter changes the carriers (bare cards never carry) but never the tree.
-  const winter = season === "WINTER";
+  // The season's leafKeep changes the carriers (only shown leaves carry; winter cards never) but never the tree.
+  const leafKeep = treeColours(season, species, null).leafKeep;
   const foldPlan = useMemo(() => {
-    const pieces = foldPieces(tree, winter);
+    const pieces = foldPieces(tree, leafKeep);
     return { pieces, plan: planFold(pieces, tree.top, dark, treeSeed) };
-  }, [tree, winter, dark, treeSeed]);
+  }, [tree, leafKeep, dark, treeSeed]);
 
   const treeRef = useRef<THREE.Group>(null);
   const groundRef = useRef<THREE.Group>(null);

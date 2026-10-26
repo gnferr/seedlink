@@ -112,7 +112,7 @@ export default function SkyDome({ time }: { time: number }) {
     u.uField.value.set(fw, fh);
     u.uCell.value = 2 * dpr;
     u.uBufH.value = Math.floor(size.height * dpr);
-    sky.sky.forEach((c, k) => set(u.uSky.value[k], c));
+    for (let k = 0; k < sky.sky.length; k++) set(u.uSky.value[k], sky.sky[k]);
     set(u.uLight.value, sky.light); set(u.uLit.value, sky.cloudLit); set(u.uDark.value, sky.cloudDark);
     u.uSun.value.set(sky.sun.x, sky.sun.y, sky.sun.up ? 1 : 0);
     u.uMoon.value.set(sky.moon.x, sky.moon.y, sky.moon.up ? 1 : 0);

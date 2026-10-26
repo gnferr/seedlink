@@ -16,7 +16,7 @@ type Cfg = {
   strands: number; strandLen: number; specks: number;
 };
 // Mockup VARIANTS (lush -> lushOak; sparse/autumn dropped). Colours live in palette.ts.
-const BASE: Cfg = { trunkH: 8, trunkW: 0.9, limbs: 7, fan: 2.6, limbLow: 0.62, limbLen: 5.2, taper: 0.5, depth: 3, split: 0.62, fork: 0.4, lift: 0.15, bend: 0.25, inner: 0.5, clump: 1.4, perClump: 22, flat: 0.78, strands: 0, strandLen: 0, specks: 0 };
+const BASE: Cfg = { trunkH: 8, trunkW: 0.9, limbs: 7, fan: 2.6, limbLow: 0.62, limbLen: 5.2, taper: 0.5, depth: 3, split: 0.62, fork: 0.4, lift: 0.15, bend: 0.25, inner: 0.5, clump: 1.4, perClump: 22, flat: 0.78, strands: 0, strandLen: 0, specks: 2 }; // every species gets a few spring petal specks
 const VARIANTS: Record<Species, Cfg> = {
   oak: { ...BASE },
   lushOak: { ...BASE, clump: 1.9, perClump: 34, inner: 0.7, specks: 4 },

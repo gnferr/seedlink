@@ -25,8 +25,12 @@ export function easeInOutCubic(t: number): number {
 
 export type FoldPiece = { x: number; y: number; z: number; canCarry: boolean; segment?: boolean }; // cards first (index i), then segments (cards.length + j, midpoint)
 
-export function foldPieces(tree: Tree, winter: boolean): FoldPiece[] {
-  const cards = tree.cards.map((c) => ({ x: c.x, y: c.y, z: c.z, canCarry: !winter && !c.speck }));
+/** Whether leaf card i is on the tree this season (the season keeps a leafKeep share of the leaves). */
+export const cardShown = (i: number, leafKeep: number) => hash3(i, 17, 3, 29) < leafKeep;
+const BARE = 0.15; // below this leafKeep (winter) the few cards left never carry
+
+export function foldPieces(tree: Tree, leafKeep: number): FoldPiece[] {
+  const cards = tree.cards.map((c, i) => ({ x: c.x, y: c.y, z: c.z, canCarry: leafKeep >= BARE && !c.speck && cardShown(i, leafKeep) }));
   const segs = tree.segments.map((g) => ({ x: (g.x0 + g.x1) / 2, y: (g.y0 + g.y1) / 2, z: (g.z0 + g.z1) / 2, canCarry: true, segment: true }));
   return [...cards, ...segs];
 }

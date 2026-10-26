@@ -26,6 +26,13 @@ export default function TimeSlider({ value, onChange }: { value: number; onChang
           aria-label="Time of day"
           aria-valuetext={timeLabel(value)}
           onChange={(e) => onChange(Number(e.target.value) / 1000)}
+          onKeyDown={(e) => {
+            // One arrow press = 10 minutes of the 06:00..23:00 span; drags stay fine-grained.
+            const dir = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[e.key];
+            if (!dir) return;
+            e.preventDefault();
+            onChange(Math.min(1, Math.max(0, value + (dir * 10) / 1020)));
+          }}
         />
       </div>
       <span className="time-label">{period}</span>
