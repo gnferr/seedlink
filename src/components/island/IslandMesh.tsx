@@ -6,6 +6,7 @@ import * as THREE from "three";
 import type { Island, IslandVoxel } from "@/lib/island";
 import { INK, PAD, PALETTES } from "@/lib/palette";
 import { isFinder, type DarkModule } from "@/lib/qr";
+import { skyState } from "@/lib/daycycle";
 import { hash3 } from "@/lib/rng";
 import type { Season } from "@/lib/seasons";
 import type { FoldState } from "./IslandScene";
@@ -22,8 +23,8 @@ const ink = new THREE.Color(INK);
 // hedges to INK and flattens them, and dims the grass beyond the ring so the hedge frames the folded code.
 const HEDGE = { tall: 0.8, low: 0.5 }; // finder and module hedge heights in the tree state
 const RING = { scale: 1.4, lift: 0.2 }; // the ring stands 0.4 above the grass
-const DIM = 0.85; // how far the fold sinks the grass beyond the ring into the night
-const dusk = new THREE.Color("#1d2140");
+const DIM = 0.85; // how far the fold sinks the grass beyond the ring into the sky behind it
+const dusk = new THREE.Color();
 
 function voxelColour(v: IslandVoxel, season: Season, t: number, out: THREE.Color) {
   const p = PALETTES[season];
@@ -71,6 +72,7 @@ export default function IslandMesh({
   size,
   pitch,
   season,
+  time,
   fold,
   reducedMotion,
   groupRef,
@@ -82,6 +84,8 @@ export default function IslandMesh({
   /** Module width in world units. */
   pitch: number;
   season: Season;
+  /** Time of day; the folded grass fades toward the sky at that time. */
+  time: number;
   fold: RefObject<FoldState>;
   reducedMotion: boolean;
   /** Everything a tap counts as ground. */
@@ -131,8 +135,10 @@ export default function IslandMesh({
     const { t } = fold.current;
     const l = last.current;
     const vm = voxels.current, tm = tiles.current, dm = deco.current;
-    const key = [vm, tm, dm, cells, dark, decos, season];
+    const key = [vm, tm, dm, cells, dark, decos, season, time];
     if (t !== l.t || key.some((k, i) => k !== l.key[i])) {
+      const [r, g, b] = skyState(time).sky[2];
+      dusk.setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace);
       if (vm) {
         for (const i of folding) vm.setColorAt(i, voxelColour(cells[i], season, t, colour));
         if (vm.instanceColor) vm.instanceColor.needsUpdate = true;

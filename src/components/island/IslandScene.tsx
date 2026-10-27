@@ -189,7 +189,7 @@ export default function IslandScene(props: IslandSceneProps) {
       <Timeline foldRef={fold} folded={folded} reducedMotion={reducedMotion} world={tree} bobRef={bobRef} ratio={ratio} setPhase={setPhase} onPhase={onPhase} />
       <FoldCamera radius={island.radius} crownRadius={tree.crownRadius} size={matrix.size} insets={insets} fold={fold} orbit={phase === "tree"} />
       <group ref={bobRef}>
-        <IslandMesh island={island} dark={dark} size={matrix.size} pitch={pitch} season={season} fold={fold} reducedMotion={reducedMotion} groupRef={groundRef} />
+        <IslandMesh island={island} dark={dark} size={matrix.size} pitch={pitch} season={season} time={time} fold={fold} reducedMotion={reducedMotion} groupRef={groundRef} />
         <TreeMesh tree={tree} pieces={foldPlan.pieces} plan={foldPlan.plan} dark={dark} season={season} leaf={leaf} fold={fold} reducedMotion={reducedMotion} groupRef={treeRef} />
         {!reducedMotion && phase !== "folded" && <Particles tree={tree} season={season} fold={fold} />}
       </group>
