@@ -1,5 +1,5 @@
 import { hash3, mulberry32 } from "./rng.ts";
-import { QUIET_ZONE } from "./qr.ts";
+import { QUIET_ZONE, REF_SIZE } from "./qr.ts";
 
 export type IslandKind = "pad" | "grass" | "dirt" | "mix" | "stone";
 export type IslandVoxel = { x: number; y: number; z: number; depth: number; kind: IslandKind };
@@ -15,9 +15,9 @@ export type Island = {
 
 export const ISLAND_VOXEL_BUDGET = 6000;
 
-// A wobbly rounded square hugging the QR slab, grown from the link's seed.
-export function growIsland(seed: number, size: number): Island {
-  const slabHalf = (size - 1) / 2 + QUIET_ZONE;
+// A wobbly rounded square hugging the QR slab (the fixed REF_SIZE world, see qr.ts), grown from the link's seed.
+export function growIsland(seed: number): Island {
+  const slabHalf = (REF_SIZE - 1) / 2 + QUIET_ZONE;
   const r = mulberry32(seed);
   const inSlab = (x: number, z: number) => Math.abs(x) <= slabHalf && Math.abs(z) <= slabHalf;
 

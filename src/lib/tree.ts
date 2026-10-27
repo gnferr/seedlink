@@ -1,6 +1,7 @@
 // Semi-realistic pixel trees as leaf cards and tapered branch segments. A 3D port of the species mockup's
 // tree() (.superpowers/brainstorm/.../tree-pixel-variants.html): limbs radiate around the trunk in azimuth and the
 // mockup's 2D fan becomes elevation spread. Pure: a function of (species, seed, size).
+import { REF_SIZE } from "./qr.ts";
 import { hash3, mulberry32 } from "./rng.ts";
 
 export type Species = "oak" | "lushOak" | "willow" | "acacia" | "birch" | "cherry";
@@ -8,7 +9,7 @@ export const SPECIES: readonly Species[] = ["oak", "lushOak", "willow", "acacia"
 export type LeafCard = { x: number; y: number; z: number; rotY: number; tilt: number; size: number; shade: number; speck: boolean }; // speck = fruit/petal card, never a carrier
 export type Segment = { x0: number; y0: number; z0: number; x1: number; y1: number; z1: number; r0: number; r1: number }; // tapered limb piece
 export type Tree = { species: Species; cards: LeafCard[]; segments: Segment[]; top: number; trunkHeight: number; crownRadius: number };
-export const CARD_BUDGET = 6000, SEGMENT_BUDGET = 1500, TREE_GROWTH_CAP = 37;
+export const CARD_BUDGET = 6000, SEGMENT_BUDGET = 1500;
 
 type Cfg = {
   trunkH: number; trunkW: number; limbs: number; fan: number; limbLow: number; limbLen: number; taper: number; depth: number;
@@ -35,9 +36,10 @@ export function pickSpecies(previous: Species | null, r: number): Species {
   return pool[Math.min(pool.length - 1, Math.floor(r * pool.length))];
 }
 
-export function growTree(species: Species, seed: number, size: number): Tree {
+// Grown for the fixed REF_SIZE world (see qr.ts); fitTree then sizes it to the island.
+export function growTree(species: Species, seed: number): Tree {
   const cfg = VARIANTS[species], rnd = mulberry32(seed);
-  const TS = Math.max(1.1, Math.min(size, TREE_GROWTH_CAP) / 17), G = TS * SHAPE_SCALE; // G: mockup units -> modules
+  const TS = REF_SIZE / 17, G = TS * SHAPE_SCALE; // G: mockup units -> modules
   const segments: Segment[] = [], cards: LeafCard[] = [], clumps: Clump[] = [];
   const seg = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, r0: number, r1: number) => {
     if (segments.length < SEGMENT_BUDGET) segments.push({ x0, y0, z0, x1, y1, z1, r0, r1 });
