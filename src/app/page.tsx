@@ -7,7 +7,7 @@ import HintChip from "@/components/controls/HintChip";
 import SeasonPanel from "@/components/controls/SeasonPanel";
 import { timeFromClock } from "@/lib/daycycle";
 import { generateMatrix, QUIET_ZONE, type QrMatrix } from "@/lib/qr";
-import { exportPng } from "@/lib/exporters";
+import { exportPng, pngFile } from "@/lib/exporters";
 import { useReducedMotion } from "@/lib/useReducedMotion";
 import type { Season } from "@/lib/seasons";
 import { PALETTES } from "@/lib/palette";
@@ -28,6 +28,9 @@ const UNAVAILABLE = "3D view unavailable — your browser could not start WebGL.
 
 const DEFAULT_URL = "https://example.com";
 const DEBOUNCE_MS = 300;
+const FILENAME = "seedlink-qr.png";
+
+type ShareMode = "share" | "copy";
 
 type Qr = { text: string; matrix: QrMatrix };
 
@@ -59,6 +62,20 @@ export default function Home() {
     const d = new Date();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one read of the clock after hydration, never again
     setTime(timeFromClock(d.getHours(), d.getMinutes()));
+  }, []);
+  // A shared address (?u=…) opens on its link. Read before the scene mounts (it waits for the layout measure),
+  // so the first island grown is already the shared one.
+  useLayoutEffect(() => {
+    const u = new URLSearchParams(window.location.search).get("u");
+    if (!u?.trim()) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- one read of the address after hydration, never again */
+    setInput(u);
+    try {
+      setQr({ text: u, matrix: generateMatrix(u) });
+    } catch {
+      // Too long: the debounce below flags it and keeps the default island.
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
   const [folded, setFolded] = useState(false);
   const [phase, setPhase] = useState<FoldPhase>("tree");
@@ -98,6 +115,12 @@ export default function Home() {
     }, DEBOUNCE_MS);
     return () => clearTimeout(id);
   }, [input]);
+
+  // The address carries the link, so the page itself can be shared; replace, not push, so Back leaves the page.
+  useEffect(() => {
+    const share = !empty && qr.text !== DEFAULT_URL;
+    history.replaceState(null, "", share ? `?u=${encodeURIComponent(qr.text)}` : window.location.pathname);
+  }, [qr.text, empty]);
 
   // A new link regrows the tree. The scene always grows a new world, but reports it on its next frame: drop
   // "folded" now so a check can't grade the old code's frame under the new link meanwhile.
@@ -153,16 +176,52 @@ export default function Home() {
     return () => clearTimeout(id);
   }, [phase, tooSmall, verifyKey, currentFrame, frame.insets, qr.matrix, glEpoch]);
 
-  // The file is drawn from the matrix alone, not the scene; it is still self-checked before it downloads.
-  const saveImage = () => {
+  // The file is drawn from the matrix alone, not the scene; it is still self-checked before it leaves.
+  const qrCanvas = () => {
     const img = qrPixels(qr.matrix);
     const separation = sampleBuffer(img.data, img.width, img.height, qr.matrix, QR_IMAGE.moduleSize);
-    if (!separation.separated) return setScan({ key: verifyKey, frame: currentFrame, separation }); // Save now says why it won't scan
+    if (!separation.separated) {
+      setScan({ key: verifyKey, frame: currentFrame, separation }); // Save and Share now say why it won't scan
+      return null;
+    }
     const canvas = document.createElement("canvas");
     canvas.width = img.width;
     canvas.height = img.height;
     canvas.getContext("2d")?.putImageData(new ImageData(img.data, img.width, img.height), 0, 0);
-    exportPng(canvas, "seedlink-qr.png");
+    return canvas;
+  };
+  const saveImage = () => {
+    const canvas = qrCanvas();
+    if (canvas) exportPng(canvas, FILENAME);
+  };
+
+  // Phones share the file through the system sheet; elsewhere it goes to the clipboard. Neither: no button.
+  const [shareMode, setShareMode] = useState<ShareMode | null>(null);
+  useEffect(() => {
+    const probe = new File([""], FILENAME, { type: "image/png" });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one feature check after hydration, never again
+    setShareMode(
+      navigator.canShare?.({ files: [probe] }) ? "share" : typeof navigator.clipboard?.write === "function" && typeof ClipboardItem !== "undefined" ? "copy" : null,
+    );
+  }, []);
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const id = setTimeout(() => setNotice(null), 2500);
+    return () => clearTimeout(id);
+  }, [notice]);
+  const shareImage = () => {
+    const canvas = qrCanvas();
+    if (!canvas) return;
+    const file = pngFile(canvas, FILENAME);
+    const sent =
+      shareMode === "share"
+        ? navigator.share({ files: [file], title: "Seedlink", text: qr.text }).then(() => null)
+        : navigator.clipboard.write([new ClipboardItem({ "image/png": file })]).then(() => "Copied the QR image.");
+    sent.then(setNotice, (e: unknown) => {
+      // Closing the share sheet is not a failure.
+      if (!(e instanceof DOMException && e.name === "AbortError")) setNotice("Couldn't share the image. Use Save instead.");
+    });
   };
 
   const onCanvasReady = useCallback((c: HTMLCanvasElement) => {
@@ -201,7 +260,7 @@ export default function Home() {
     gradedNow: scan?.frame === currentFrame,
   };
   const blocked = saveBlockedReason(status);
-  const hint = sceneFailed ? UNAVAILABLE : hintText(status);
+  const hint = sceneFailed ? UNAVAILABLE : notice ?? hintText(status);
   const action = sceneFailed ? null : hintAction(phase);
 
   useEffect(() => {
@@ -291,6 +350,8 @@ export default function Home() {
             seasonButtonRef={seasonButtonRef}
             saveBlocked={blocked}
             onSave={saveImage}
+            shareMode={shareMode}
+            onShare={shareImage}
           />
         </div>
       </div>
