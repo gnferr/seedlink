@@ -44,4 +44,4 @@ It deploys to Vercel with the default Next.js settings: import the repository an
 
 ## Docs
 
-Design specs and implementation plans are in `docs/superpowers/`. Product notes are in `PRODUCT.md`.
+Design specs are in `docs/superpowers/specs/` and the improvement backlog is in `docs/superpowers/plans/`. Product notes are in `PRODUCT.md`.
