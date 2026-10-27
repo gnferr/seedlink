@@ -1,28 +1,29 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { growIsland, ISLAND_VOXEL_BUDGET } from "./island.ts";
-import { QUIET_ZONE } from "./qr.ts";
+import { QUIET_ZONE, REF_SIZE } from "./qr.ts";
 
 const seeds = Array.from({ length: 20 }, (_, i) => i);
 
-test("same seed and size give the same island", () => {
-  assert.deepEqual(growIsland(7, 25), growIsland(7, 25));
+test("same seed gives the same island", () => {
+  assert.deepEqual(growIsland(7), growIsland(7));
 });
 
 test("different seeds give different islands", () => {
-  const a = growIsland(1, 25);
-  const b = growIsland(2, 25);
+  const a = growIsland(1);
+  const b = growIsland(2);
   assert.notDeepEqual(a.voxels, b.voxels);
 });
 
-test("slabHalf follows size and quiet zone", () => {
-  assert.equal(growIsland(3, 25).slabHalf, (25 - 1) / 2 + QUIET_ZONE);
+test("slabHalf follows REF_SIZE and the quiet zone", () => {
+  assert.equal(growIsland(3).slabHalf, (REF_SIZE - 1) / 2 + QUIET_ZONE);
 });
 
 test("slab is fully covered by pad and the rest of the top layer is grass", () => {
-  for (const size of [21, 25, 37, 57]) {
+  {
+    const size = REF_SIZE;
     for (const seed of seeds) {
-      const { slabHalf, voxels } = growIsland(seed, size);
+      const { slabHalf, voxels } = growIsland(seed);
       const top = new Map<string, string>();
       for (const v of voxels) if (v.depth === 0) top.set(`${v.x},${v.z}`, v.kind);
       for (let x = -slabHalf; x <= slabHalf; x++)
@@ -35,14 +36,14 @@ test("slab is fully covered by pad and the rest of the top layer is grass", () =
   }
 });
 
-test("voxel budget holds at size 37", () => {
-  for (const seed of seeds) assert.ok(growIsland(seed, 37).voxels.length <= ISLAND_VOXEL_BUDGET);
+test("voxel budget holds", () => {
+  for (const seed of seeds) assert.ok(growIsland(seed).voxels.length <= ISLAND_VOXEL_BUDGET);
 });
 
 test("deco and waterfall stay off the slab", () => {
-  for (const size of [21, 25, 37, 57]) {
+  {
     for (const seed of seeds) {
-      const { slabHalf, deco, waterfall } = growIsland(seed, size);
+      const { slabHalf, deco, waterfall } = growIsland(seed);
       for (const d of deco) assert.ok(Math.abs(d.x) > slabHalf || Math.abs(d.z) > slabHalf);
       assert.ok(Math.abs(waterfall.x) > slabHalf || Math.abs(waterfall.z) > slabHalf);
     }
@@ -50,9 +51,10 @@ test("deco and waterfall stay off the slab", () => {
 });
 
 test("slab corners keep a grass ring and an underside rim beyond them", () => {
-  for (const size of [21, 25, 29, 37, 45, 57]) {
+  {
+    const size = REF_SIZE;
     for (const seed of seeds) {
-      const { slabHalf: s, voxels } = growIsland(seed, size);
+      const { slabHalf: s, voxels } = growIsland(seed);
       const at = new Set(voxels.map((v) => `${v.x},${v.z},${v.depth}`));
       for (let x = -s - 1; x <= s + 1; x++)
         for (let z = -s - 1; z <= s + 1; z++)

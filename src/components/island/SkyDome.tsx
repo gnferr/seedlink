@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { skyState } from "@/lib/daycycle";
@@ -79,17 +79,25 @@ export default function SkyDome({ time }: { time: number }) {
   const dpr = useThree((s) => s.viewport.dpr);
   const fw = Math.max(1, Math.ceil(size.width / 2)), fh = Math.max(1, Math.ceil(size.height / 2));
 
-  // The noise is rebuilt only on a viewport resize, never per frame or on a dpr switch.
+  // The noise costs ~100-200 ms on a big screen, so it is rebuilt once a resize settles, never per resize step,
+  // frame or dpr switch. Meanwhile the old texture stretches: the shader samples it in 0-1 coordinates.
+  const [built, setBuilt] = useState({ w: fw, h: fh });
+  useEffect(() => {
+    if (built.w === fw && built.h === fh) return;
+    const id = setTimeout(() => setBuilt({ w: fw, h: fh }), 250);
+    return () => clearTimeout(id);
+  }, [fw, fh, built]);
   const texture = useMemo(() => {
-    const f = buildSkyFields(fw, fh, 51);
-    const data = new Float32Array(fw * fh * 4);
-    for (let i = 0; i < fw * fh; i++) {
+    const { w, h } = built;
+    const f = buildSkyFields(w, h, 51);
+    const data = new Float32Array(w * h * 4);
+    for (let i = 0; i < w * h; i++) {
       data[i * 4] = f.density[i]; data[i * 4 + 1] = f.shade[i]; data[i * 4 + 2] = f.milky[i]; data[i * 4 + 3] = 1;
     }
-    const t = new THREE.DataTexture(data, fw, fh, THREE.RGBAFormat, THREE.FloatType);
+    const t = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, THREE.FloatType);
     t.needsUpdate = true;
     return t;
-  }, [fw, fh]);
+  }, [built]);
   useEffect(() => () => texture.dispose(), [texture]);
 
   const material = useMemo(() => new THREE.ShaderMaterial({

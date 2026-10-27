@@ -2,11 +2,6 @@ import { QUIET_ZONE, type QrMatrix } from "./qr.ts";
 import { NO_INSETS, scanFit, type ScanInsets } from "./scanFit.ts";
 import { classifySeparation, type Separation } from "./verify.ts";
 
-/** Module pitch in pixels of a w×h buffer under the SCAN camera (the same fit as the camera, insets included). */
-export function scanPitch(width: number, height: number, size: number, insets: ScanInsets = NO_INSETS): number {
-  return scanFit(width, height, size + QUIET_ZONE * 2, insets).zoom;
-}
-
 /**
  * Samples one pixel per module centre from an RGBA buffer. Grid column x runs right and row z runs
  * down from the pad centre, which sits `dy` pixels below the buffer centre (SCAN view: up = -z, right = +x).

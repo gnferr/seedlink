@@ -7,7 +7,7 @@ import { easeInOutCubic, FOLD_SECONDS, foldPieces, planFold } from "@/lib/fold";
 import { growIsland } from "@/lib/island";
 import { treeColours } from "@/lib/palette";
 import { isTap, nextFoldTarget } from "@/lib/pointer";
-import { darkModules, modulePitch, REF_SIZE, type QrMatrix } from "@/lib/qr";
+import { darkModules, modulePitch, type QrMatrix } from "@/lib/qr";
 import { hashString } from "@/lib/rng";
 import type { ScanInsets } from "@/lib/scanFit";
 import type { Season } from "@/lib/seasons";
@@ -159,8 +159,8 @@ export default function IslandScene(props: IslandSceneProps) {
   // The world is fixed at REF_SIZE; a longer link gets more, smaller modules on the same slab.
   const pitch = modulePitch(matrix.size);
   const dark = useMemo(() => darkModules(matrix, pitch), [matrix, pitch]);
-  const island = useMemo(() => growIsland(hashString(text), REF_SIZE), [text]);
-  const tree = useMemo(() => fitTree(growTree(species, treeSeed, REF_SIZE), island.radius), [species, treeSeed, island.radius]);
+  const island = useMemo(() => growIsland(hashString(text)), [text]);
+  const tree = useMemo(() => fitTree(growTree(species, treeSeed), island.radius), [species, treeSeed, island.radius]);
   // The season's leafKeep changes the carriers (only shown leaves carry; winter cards never) but never the tree.
   const leafKeep = treeColours(season, species, null).leafKeep;
   const foldPlan = useMemo(() => {

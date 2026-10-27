@@ -8,21 +8,19 @@ test("six species", () => {
 
 for (const s of SPECIES) {
   test(`${s}: deterministic per seed, different across seeds`, () => {
-    assert.deepEqual(growTree(s, 42, 25), growTree(s, 42, 25));
-    assert.notDeepEqual(growTree(s, 42, 25), growTree(s, 43, 25));
-    assert.equal(growTree(s, 42, 25).species, s);
+    assert.deepEqual(growTree(s, 42), growTree(s, 42));
+    assert.notDeepEqual(growTree(s, 42), growTree(s, 43));
+    assert.equal(growTree(s, 42).species, s);
   });
 
-  test(`${s}: budget at size 37, growth capped`, () => {
-    const big = growTree(s, 1, 37), huge = growTree(s, 1, 101);
-    assert.ok(big.cards.length <= CARD_BUDGET, `${big.cards.length} cards`);
-    assert.ok(big.segments.length <= SEGMENT_BUDGET, `${big.segments.length} segments`);
-    assert.equal(huge.cards.length, big.cards.length);
-    assert.equal(huge.segments.length, big.segments.length);
+  test(`${s}: within the card and segment budgets`, () => {
+    const t = growTree(s, 1);
+    assert.ok(t.cards.length <= CARD_BUDGET, `${t.cards.length} cards`);
+    assert.ok(t.segments.length <= SEGMENT_BUDGET, `${t.segments.length} segments`);
   });
 
   test(`${s}: trunk stands on the slab`, () => {
-    const t = growTree(s, 42, 25);
+    const t = growTree(s, 42);
     const low = t.segments.reduce((a, b) => (b.y0 < a.y0 ? b : a));
     assert.equal(low.y0, 0);
     assert.ok(Math.abs(low.x0) <= 1.5 && Math.abs(low.z0) <= 1.5, `${low.x0},${low.z0}`);
@@ -30,11 +28,12 @@ for (const s of SPECIES) {
   });
 }
 
-for (const size of [21, 25, 37]) {
+{
+  const size = 25; // REF_SIZE: the world every tree grows for
   for (const seed of [1, 7, 42]) {
-    test(`crowns overhang a ${size}-module code, birch is tallest (seed ${seed})`, () => {
+    test(`crowns overhang the code, birch is tallest (seed ${seed})`, () => {
       const need = (size - 1) / 2;
-      const trees = Object.fromEntries(SPECIES.map((s) => [s, growTree(s, seed, size)])) as Record<Species, ReturnType<typeof growTree>>;
+      const trees = Object.fromEntries(SPECIES.map((s) => [s, growTree(s, seed)])) as Record<Species, ReturnType<typeof growTree>>;
       for (const s of SPECIES) {
         const min = s === "birch" ? 0.6 * need : need;
         assert.ok(trees[s].crownRadius >= min, `${s} crownRadius ${trees[s].crownRadius} < ${min}`);
@@ -45,7 +44,7 @@ for (const size of [21, 25, 37]) {
 }
 
 test("crownRadius ignores specks; top is the max y", () => {
-  const t = growTree("cherry", 42, 25);
+  const t = growTree("cherry", 42);
   assert.ok(t.cards.some((c) => c.speck));
   const leaves = t.cards.filter((c) => !c.speck);
   assert.equal(t.crownRadius, Math.max(...leaves.map((c) => Math.hypot(c.x, c.z))));
@@ -69,7 +68,7 @@ test("pickSpecies never repeats and is even", () => {
 for (const s of SPECIES) {
   test(`${s}: fitTree sizes the crown to the island, capped in height, purely`, () => {
     for (const seed of [1, 7, 42]) {
-      const t = growTree(s, seed, 25), before = structuredClone(t), f = fitTree(t, 30);
+      const t = growTree(s, seed), before = structuredClone(t), f = fitTree(t, 30);
       const crown = (s === "birch" ? 1.1 : 1.5) * 30, cap = MAX_TOP_TO_ISLAND * 30;
       // The crown ratio holds unless that would make the tree taller than the cap; then the top sits on the cap.
       assert.ok(f.top <= cap + 1e-6);
@@ -84,7 +83,7 @@ for (const s of SPECIES) {
 
 test("only birch, the tallest species, is ever shortened by the height cap", () => {
   for (const s of SPECIES) for (let seed = 1; seed <= 40; seed++) {
-    const f = fitTree(growTree(s, seed, 25), 30);
+    const f = fitTree(growTree(s, seed), 30);
     if (s !== "birch") assert.ok(Math.abs(f.crownRadius - 45) < 1e-6, `${s} seed ${seed} crown ${f.crownRadius}`);
   }
 });

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateMatrix, QUIET_ZONE, type QrMatrix } from "./qr.ts";
-import { bufferScale, sampleBuffer, scanPitch } from "./sampleScan.ts";
+import { bufferScale, sampleBuffer } from "./sampleScan.ts";
 import { FIT_MARGIN, scanFit, type ScanInsets } from "./scanFit.ts";
 
 const W = 600;
@@ -34,7 +34,7 @@ const run = (buf: Uint8ClampedArray, insets?: ScanInsets) => {
 };
 
 test("pitch follows the camera fit including its shared margin", () => {
-  assert.equal(scanPitch(W, H, m.size), (Math.min(W, H) / (m.size + QUIET_ZONE * 2)) * FIT_MARGIN);
+  assert.equal(scanFit(W, H, m.size + QUIET_ZONE * 2).zoom, (Math.min(W, H) / (m.size + QUIET_ZONE * 2)) * FIT_MARGIN);
 });
 
 test("insets shrink the fit to the free band and centre the pad in it", () => {
@@ -42,7 +42,6 @@ test("insets shrink the fit to the free band and centre the pad in it", () => {
   const f = scanFit(W, H, plane, { top: 120, bottom: 60 });
   assert.equal(f.zoom, ((H - 180) / plane) * FIT_MARGIN);
   assert.equal(f.dy, 30);
-  assert.equal(scanPitch(W, H, m.size, { top: 120, bottom: 60 }), f.zoom);
   // The pad, quiet zone included, lies inside the free band.
   const half = (f.zoom * plane) / 2;
   assert.ok(H / 2 + f.dy - half >= 120 && H / 2 + f.dy + half <= H - 60);

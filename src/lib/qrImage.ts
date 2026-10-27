@@ -1,6 +1,7 @@
+import { INK } from "./palette.ts";
 import { QUIET_ZONE, type QrMatrix } from "./qr.ts";
 
-export const QR_IMAGE = { ink: "#2a2140", background: "#ffffff", moduleSize: 16 };
+export const QR_IMAGE = { ink: INK, background: "#ffffff", moduleSize: 16 };
 
 const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 
