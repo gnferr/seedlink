@@ -578,6 +578,30 @@ test("at 390x844 the whole crown fits the viewport width for several species", a
   expect([...seen]).toEqual(expect.arrayContaining(["oak", "willow"]));
 });
 
+test("the island keeps its size on screen whichever species grows", async ({ browser }) => {
+  const px = new Map<string, number>();
+  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    await page.addInitScript((s) => {
+      let a = s; // mulberry32, picks the species and seed
+      Math.random = () => {
+        a = (a + 0x6d2b79f5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }, seed);
+    await ready(page);
+    await expect(scene(page)).toHaveAttribute("data-island-px", /\d/);
+    px.set(`${await attr(page, "data-species")} (seed ${seed})`, Number(await attr(page, "data-island-px")));
+    await ctx.close();
+  }
+  const values = [...px.values()];
+  expect(new Set([...px.keys()].map((k) => k.split(" ")[0])).size, `species ${[...px.keys()]}`).toBeGreaterThanOrEqual(3);
+  expect(Math.max(...values) / Math.min(...values), `island px ${JSON.stringify(Object.fromEntries(px))}`).toBeLessThanOrEqual(1.05);
+});
+
 // Share: phones get the system share sheet, elsewhere the image goes to the clipboard. Stubs record what was sent.
 type Sent = { name: string; type: string; size: number; text?: string };
 const shareButton = (page: Page) => page.getByRole("button", { name: /^(Share|Copy) image$/ });

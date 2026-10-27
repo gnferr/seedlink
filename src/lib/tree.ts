@@ -136,10 +136,15 @@ export function growTree(species: Species, seed: number, size: number): Tree {
 }
 
 export const CROWN_TO_ISLAND = 1.5, BIRCH_CROWN_TO_ISLAND = 1.1;
+// The tree view frames this height for every tree, so the island never changes size on screen; taller trees
+// (mostly birch, up to ~5× the radius) are scaled down to it instead of zooming everything out.
+export const MAX_TOP_TO_ISLAND = 3.2;
 
-// Uniformly scales a grown tree so its crown is a fixed multiple of the island, whatever the link length.
+// Uniformly scales a grown tree so its crown is a fixed multiple of the island, whatever the link length,
+// and no taller than MAX_TOP_TO_ISLAND × the island radius.
 export function fitTree(tree: Tree, islandRadius: number): Tree {
-  const k = (tree.species === "birch" ? BIRCH_CROWN_TO_ISLAND : CROWN_TO_ISLAND) * islandRadius / tree.crownRadius;
+  const crown = (tree.species === "birch" ? BIRCH_CROWN_TO_ISLAND : CROWN_TO_ISLAND) * islandRadius / tree.crownRadius;
+  const k = Math.min(crown, MAX_TOP_TO_ISLAND * islandRadius / tree.top);
   return {
     ...tree,
     cards: tree.cards.map((c) => ({ ...c, x: c.x * k, y: c.y * k, z: c.z * k, size: c.size * k })),
