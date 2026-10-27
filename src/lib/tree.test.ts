@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CARD_BUDGET, fitTree, growTree, pickSpecies, SEGMENT_BUDGET, SPECIES, type Species } from "./tree.ts";
+import { CARD_BUDGET, fitTree, growTree, MAX_TOP_TO_ISLAND, pickSpecies, SEGMENT_BUDGET, SPECIES, type Species } from "./tree.ts";
 
 test("six species", () => {
   assert.deepEqual([...SPECIES].sort(), ["acacia", "birch", "cherry", "lushOak", "oak", "willow"]);
@@ -67,10 +67,13 @@ test("pickSpecies never repeats and is even", () => {
 });
 
 for (const s of SPECIES) {
-  test(`${s}: fitTree sizes the crown to the island, purely`, () => {
+  test(`${s}: fitTree sizes the crown to the island, capped in height, purely`, () => {
     for (const seed of [1, 7, 42]) {
       const t = growTree(s, seed, 25), before = structuredClone(t), f = fitTree(t, 30);
-      assert.ok(Math.abs(f.crownRadius - (s === "birch" ? 1.1 : 1.5) * 30) < 1e-6);
+      const crown = (s === "birch" ? 1.1 : 1.5) * 30, cap = MAX_TOP_TO_ISLAND * 30;
+      // The crown ratio holds unless that would make the tree taller than the cap; then the top sits on the cap.
+      assert.ok(f.top <= cap + 1e-6);
+      assert.ok(Math.abs(f.crownRadius - crown) < 1e-6 || (Math.abs(f.top - cap) < 1e-6 && f.crownRadius < crown));
       assert.equal(f.cards.length, t.cards.length);
       assert.equal(f.segments.length, t.segments.length);
       assert.deepEqual(t, before);
@@ -78,3 +81,10 @@ for (const s of SPECIES) {
     }
   });
 }
+
+test("only birch, the tallest species, is ever shortened by the height cap", () => {
+  for (const s of SPECIES) for (let seed = 1; seed <= 40; seed++) {
+    const f = fitTree(growTree(s, seed, 25), 30);
+    if (s !== "birch") assert.ok(Math.abs(f.crownRadius - 45) < 1e-6, `${s} seed ${seed} crown ${f.crownRadius}`);
+  }
+});

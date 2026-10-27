@@ -8,6 +8,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { easeInOutCubic } from "@/lib/fold";
 import { modulePitch, QUIET_ZONE } from "@/lib/qr";
 import { scanFit, type ScanInsets } from "@/lib/scanFit";
+import { CROWN_TO_ISLAND, MAX_TOP_TO_ISLAND } from "@/lib/tree";
 import type { FoldState } from "./IslandScene";
 
 const VIEW_DIR = new THREE.Vector3(1, 0.78, 1).normalize();
@@ -20,11 +21,14 @@ const look = new THREE.Vector3();
 type Shot = { position: THREE.Vector3; target: THREE.Vector3; zoom: number; up: THREE.Vector3 };
 
 /**
- * The tree pose: an iso view along (1, 0.78, 1) at a point a third up the tree, zoomed so the island
- * (radius) and the tree (top) fit above the bottom controls. Orbit and zoom within limits of that fit.
+ * The tree pose: an iso view along (1, 0.78, 1) at a point a third up the tallest tree, zoomed so the island and the
+ * largest tree fitTree makes (crown CROWN_TO_ISLAND, top MAX_TOP_TO_ISLAND × radius) fit above the bottom controls.
+ * It depends on the island alone, so the island keeps its size on screen whichever tree grows.
+ * Orbit and zoom within limits of that fit.
  */
-export function treePose(width: number, height: number, radius: number, top: number, crownRadius: number, bottomInset: number) {
-  const sceneW = Math.max(radius * 2.4, crownRadius * 2.15); // the crown's diameter plus a margin
+export function treePose(width: number, height: number, radius: number, bottomInset: number) {
+  const top = radius * MAX_TOP_TO_ISLAND;
+  const sceneW = Math.max(radius * 2.4, radius * CROWN_TO_ISLAND * 2.15); // the widest crown's diameter plus a margin
   const sceneH = top * 0.8 + radius * 1.5;
   const zoom = Math.max(1e-3, Math.min(width / sceneW, (height - bottomInset - 40) / sceneH));
   // Look a little lower so the island rises clear of the bottom controls.
@@ -44,8 +48,8 @@ export function topPose(width: number, height: number, size: number, insets: Sca
   return { zoom, target, position: target.clone().setY(DISTANCE), up: UP_TOP };
 }
 
-export default function FoldCamera({ radius, top, crownRadius, size, insets, fold, orbit }: {
-  radius: number; top: number; crownRadius: number; size: number; insets: ScanInsets;
+export default function FoldCamera({ radius, crownRadius, size, insets, fold, orbit }: {
+  radius: number; crownRadius: number; size: number; insets: ScanInsets;
   fold: RefObject<FoldState>;
   /** Orbit is off from fold start until the grow ends. */
   orbit: boolean;
@@ -59,9 +63,9 @@ export default function FoldCamera({ radius, top, crownRadius, size, insets, fol
   const fitted = useRef<number | null>(null);
 
   // The tree fit follows the view size and the world only; an inset change alone keeps the user's orbit.
-  const key = `${width}x${height}|${radius}|${top}|${crownRadius}`;
-  const [fit, setFit] = useState(() => ({ key, pose: treePose(width, height, radius, top, crownRadius, insets.bottom) }));
-  if (fit.key !== key) setFit({ key, pose: treePose(width, height, radius, top, crownRadius, insets.bottom) });
+  const key = `${width}x${height}|${radius}`;
+  const [fit, setFit] = useState(() => ({ key, pose: treePose(width, height, radius, insets.bottom) }));
+  if (fit.key !== key) setFit({ key, pose: treePose(width, height, radius, insets.bottom) });
   const pose = fit.pose;
   const scan = useMemo(() => topPose(width, height, size, { top: insets.top, bottom: insets.bottom }), [width, height, size, insets.top, insets.bottom]);
 
@@ -134,6 +138,9 @@ export default function FoldCamera({ radius, top, crownRadius, size, insets, fol
       <OrbitControls
         ref={controls}
         makeDefault
+        // Aim from the first frame: refit's first run can come before this ref exists, and the controls would
+        // otherwise re-aim the camera at their default target, the island centre.
+        target={pose.target}
         enabled={orbit}
         enableDamping
         enablePan={false}
