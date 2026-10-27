@@ -137,20 +137,23 @@ export function growTree(species: Species, seed: number): Tree {
   return { species, cards, segments, top, trunkHeight, crownRadius };
 }
 
-export const CROWN_TO_ISLAND = 1.5, BIRCH_CROWN_TO_ISLAND = 1.1;
+export const CROWN_TO_ISLAND = 1.5, BIRCH_CROWN_TO_ISLAND = 1.35;
 // The tree view frames this height for every tree, so the island never changes size on screen; taller trees
 // (mostly birch, up to ~5× the radius) are scaled down to it instead of zooming everything out.
 export const MAX_TOP_TO_ISLAND = 3.2;
+const STRETCH = 2.2;
 
-// Uniformly scales a grown tree so its crown is a fixed multiple of the island, whatever the link length,
-// and no taller than MAX_TOP_TO_ISLAND × the island radius.
+// Scales a grown tree so its crown is a fixed multiple of the island, whatever the link length, and no taller
+// than MAX_TOP_TO_ISLAND × the island radius; a tree held to that height spreads sideways instead of thinning.
 export function fitTree(tree: Tree, islandRadius: number): Tree {
   const crown = (tree.species === "birch" ? BIRCH_CROWN_TO_ISLAND : CROWN_TO_ISLAND) * islandRadius / tree.crownRadius;
   const k = Math.min(crown, MAX_TOP_TO_ISLAND * islandRadius / tree.top);
+  // A tree shrunk to the height cap spreads sideways back toward its crown width (at most STRETCH ×), so it isn't a pole.
+  const w = k * Math.min(STRETCH, crown / k);
   return {
     ...tree,
-    cards: tree.cards.map((c) => ({ ...c, x: c.x * k, y: c.y * k, z: c.z * k, size: c.size * k })),
-    segments: tree.segments.map((s) => ({ x0: s.x0 * k, y0: s.y0 * k, z0: s.z0 * k, x1: s.x1 * k, y1: s.y1 * k, z1: s.z1 * k, r0: s.r0 * k, r1: s.r1 * k })),
-    top: tree.top * k, trunkHeight: tree.trunkHeight * k, crownRadius: tree.crownRadius * k,
+    cards: tree.cards.map((c) => ({ ...c, x: c.x * w, y: c.y * k, z: c.z * w, size: c.size * Math.sqrt(k * w) })), // leaves fill the wider crown
+    segments: tree.segments.map((s) => ({ x0: s.x0 * w, y0: s.y0 * k, z0: s.z0 * w, x1: s.x1 * w, y1: s.y1 * k, z1: s.z1 * w, r0: s.r0 * k, r1: s.r1 * k })),
+    top: tree.top * k, trunkHeight: tree.trunkHeight * k, crownRadius: tree.crownRadius * w,
   };
 }
