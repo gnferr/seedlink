@@ -11,6 +11,8 @@ Grow your link into a tree. Type a URL and a pixel tree grows on a floating isla
 - **The same island for every link.** Short and long links grow the same size island; longer links just get smaller modules.
 - **Scan check before Save.** The folded code is checked in the browser, and Save explains why if it won't scan.
 - **Plain PNG export.** Save downloads a clean QR image: dark ink on white, with the quiet zone.
+- **Share.** On phones, Share sends the QR image through the system share sheet; on desktop it copies the image.
+- **Shareable page.** The address carries the link (`?u=...`), so sending the page opens the same island.
 
 Everything runs in the browser. There is no backend and no account.
 

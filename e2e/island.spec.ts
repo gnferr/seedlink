@@ -461,27 +461,34 @@ const chromeFrame = (page: Page) =>
     return { w: main.clientWidth, h: main.clientHeight, bottom };
   });
 
-test("the island is the same size on screen for a 21- and a 57-module link", async ({ page }) => {
-  // The fit follows the tree's height, so both links must grow the same tree: Math.random (the app uses it only to
-  // draw the species and seed) is seeded, and each link starts from a fresh load, so both see the same draws.
-  await page.addInitScript(() => {
-    let a = 42; // mulberry32
-    Math.random = () => {
-      a = (a + 0x6d2b79f5) | 0;
-      let t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  });
+test("the island is the same size on screen for a 21- and a 57-module link", async ({ browser }) => {
+  // The fit follows the tree's height, so both links must grow the same tree. Math.random (the app uses it only to
+  // draw the species and seed) is seeded, and each link opens from its own address (?u=) in a fresh context, so the
+  // first tree on each load comes from the same draws; typing a link would regrow after timing-dependent renders.
   const px: number[] = [], trees = new Set<string>();
   for (const size of [21, 57]) {
-    await ready(page);
-    await typeLink(page, linkOfSize(size).text);
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    const page = await ctx.newPage();
+    await page.addInitScript(() => {
+      let a = 42; // mulberry32
+      Math.random = () => {
+        a = (a + 0x6d2b79f5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    });
+    const { text } = linkOfSize(size);
+    await page.goto(`/?u=${text}`);
+    await expect(scene(page)).toHaveAttribute("aria-label", new RegExp(`"${text}"`), { timeout: 15_000 });
+    await expect(chip(page)).toContainText("Tap the tree", { timeout: 30_000 });
     await expect(scene(page)).toHaveAttribute("data-phase", "tree", { timeout: 20_000 });
+    await expect(scene(page)).toHaveAttribute("data-island-px", /\d/);
     px.push(Number(await attr(page, "data-island-px")));
     trees.add(`${await attr(page, "data-species")}/${await attr(page, "data-tree-seed")}`);
+    await ctx.close();
   }
-  expect(trees.size, "both links grew the same tree").toBe(1);
+  expect(trees.size, `both links grew the same tree: ${[...trees]}`).toBe(1);
   expect(px[0]).toBeGreaterThan(0);
   expect(Math.abs(px[1] - px[0]) / px[0], `island px ${px}`).toBeLessThanOrEqual(0.02);
 });
@@ -569,4 +576,84 @@ test("at 390x844 the whole crown fits the viewport width for several species", a
   console.log("species covered:", [...seen].join(","));
   expect(seen.size).toBeGreaterThanOrEqual(3);
   expect([...seen]).toEqual(expect.arrayContaining(["oak", "willow"]));
+});
+
+// Share: phones get the system share sheet, elsewhere the image goes to the clipboard. Stubs record what was sent.
+type Sent = { name: string; type: string; size: number; text?: string };
+const shareButton = (page: Page) => page.getByRole("button", { name: /^(Share|Copy) image$/ });
+const sent = (page: Page) => page.evaluate(() => (window as unknown as { sent: Sent[] }).sent);
+
+test("Share hands the system share sheet the same PNG Save downloads", async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { sent: Sent[] };
+    w.sent = [];
+    Object.assign(navigator, {
+      canShare: () => true,
+      share: async (d: { files: File[]; text: string }) => void w.sent.push(...d.files.map((f) => ({ name: f.name, type: f.type, size: f.size, text: d.text }))),
+    });
+  });
+  await ready(page);
+  await expect(shareButton(page)).toHaveAccessibleName("Share image");
+  await expect(shareButton(page)).toHaveAttribute("aria-disabled", "true");
+  await shareButton(page).click({ force: true }); // aria-disabled: Playwright waits for enabled otherwise
+  expect(await sent(page)).toEqual([]);
+  await fold(page);
+  await shareButton(page).click();
+  await expect.poll(() => sent(page)).toHaveLength(1);
+  const [dl] = await Promise.all([page.waitForEvent("download"), save(page).click()]);
+  const [file] = await sent(page);
+  expect(file).toEqual({ name: "seedlink-qr.png", type: "image/png", size: readFileSync((await dl.path())!).length, text: "https://example.com" });
+});
+
+test("without a share sheet, Share copies the image and says so", async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { sent: Sent[] };
+    w.sent = [];
+    Object.assign(navigator, { canShare: undefined });
+    Object.defineProperty(navigator, "clipboard", {
+      value: { write: async (items: ClipboardItem[]) => void w.sent.push(...items.map((i) => ({ name: "", type: i.types.join(), size: 0 }))) },
+    });
+  });
+  await ready(page);
+  await expect(shareButton(page)).toHaveAccessibleName("Copy image");
+  await fold(page);
+  await shareButton(page).click();
+  await expect.poll(() => sent(page)).toEqual([{ name: "", type: "image/png", size: 0 }]);
+  await expect(chip(page)).toHaveText("Copied the QR image.");
+  await expect(chip(page)).toHaveText(VERDICT, { timeout: 5_000 });
+});
+
+test("with neither share nor clipboard, there is no Share button", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.assign(navigator, { canShare: undefined });
+    Object.defineProperty(navigator, "clipboard", { value: undefined });
+  });
+  await ready(page);
+  await expect(shareButton(page)).toHaveCount(0);
+});
+
+// The address carries the link, so a Seedlink page can itself be shared.
+test("opening ?u= grows that link's island straight away", async ({ page }) => {
+  await page.goto("/?u=hello-seedlink");
+  await expect(field(page)).toHaveValue("hello-seedlink");
+  await expect(page.getByRole("img", { name: /"hello-seedlink"/ })).toBeVisible({ timeout: 15_000 });
+  await expect(chip(page)).toContainText("Tap the tree to fold it into your code");
+});
+
+test("typing a link writes it to the address without adding history", async ({ page }) => {
+  await ready(page);
+  expect(new URL(page.url()).search).toBe("");
+  const before = await page.evaluate(() => history.length);
+  await field(page).fill("https://seed.link/a b");
+  await expect.poll(() => new URL(page.url()).searchParams.get("u")).toBe("https://seed.link/a b");
+  expect(await page.evaluate(() => history.length)).toBe(before);
+  await field(page).fill("");
+  await expect.poll(() => new URL(page.url()).search).toBe("");
+});
+
+test("a ?u= too long for one code shows the too-long state", async ({ page }) => {
+  await page.goto(`/?u=${"a".repeat(3000)}`);
+  await expect(field(page)).toHaveValue("a".repeat(3000));
+  await expect(page.locator("#save-reason")).toHaveText(TOO_LONG, { timeout: 15_000 });
+  await expect(chip(page)).toContainText(TOO_LONG);
 });

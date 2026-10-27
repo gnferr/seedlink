@@ -3,8 +3,8 @@ import type { Season } from "@/lib/seasons";
 import PixelIcon from "./PixelIcon";
 import { SEASON_LABEL, seasonIcon } from "./SeasonPanel";
 
-/** Link field, season button and Save. A refused Save stays focusable and says why. */
-export default function ControlPill({ input, onInput, invalid, season, panelOpen, onTogglePanel, seasonButtonRef, saveBlocked, onSave }: {
+/** Link field, season button, Share (when the browser can) and Save. A refused Save or Share stays focusable and says why. */
+export default function ControlPill({ input, onInput, invalid, season, panelOpen, onTogglePanel, seasonButtonRef, saveBlocked, onSave, shareMode, onShare }: {
   input: string;
   onInput(v: string): void;
   invalid: boolean;
@@ -14,6 +14,8 @@ export default function ControlPill({ input, onInput, invalid, season, panelOpen
   seasonButtonRef: Ref<HTMLButtonElement>;
   saveBlocked: string | null;
   onSave(): void;
+  shareMode: "share" | "copy" | null;
+  onShare(): void;
 }) {
   return (
     <div className="pixel-glass step-lg pill">
@@ -42,6 +44,19 @@ export default function ControlPill({ input, onInput, invalid, season, panelOpen
         >
           <PixelIcon name={seasonIcon(season)} />
         </button>
+        {shareMode && (
+          <button
+            type="button"
+            className="btn icon idle well step"
+            aria-label={shareMode === "share" ? "Share image" : "Copy image"}
+            title={saveBlocked ?? (shareMode === "share" ? "Share image" : "Copy image")}
+            aria-disabled={saveBlocked ? true : undefined}
+            aria-describedby={saveBlocked ? "save-reason" : undefined}
+            onClick={() => !saveBlocked && onShare()}
+          >
+            <PixelIcon name="share" />
+          </button>
+        )}
         <button
           type="button"
           className="btn save step"
