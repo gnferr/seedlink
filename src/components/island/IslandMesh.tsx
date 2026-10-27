@@ -6,7 +6,6 @@ import * as THREE from "three";
 import type { Island, IslandVoxel } from "@/lib/island";
 import { INK, PAD, PALETTES } from "@/lib/palette";
 import type { DarkModule } from "@/lib/qr";
-import { skyState } from "@/lib/daycycle";
 import { hash3 } from "@/lib/rng";
 import type { Season } from "@/lib/seasons";
 import type { FoldState } from "./IslandScene";
@@ -26,13 +25,10 @@ const WATER = ["#b6e2ff", "#7cc4ff", "#7cc4ff"];
 const ink = new THREE.Color(INK);
 
 // The hidden garden: a trimmed meadow on a patchy moss pad, fern clumps on the code and a hedge ring in the tree
-// state. The fold shrinks the plants away, turns moss to PAD and the clump beds to INK, and dims the grass beyond
-// the ring so the hedge frames the folded code.
+// state. The fold shrinks the plants away and turns moss to PAD and the clump beds to INK; the ring frames the code.
 const BED = 0.08; // a fern clump's bed height in the tree state
-const FROND = { count: 6, tilt: 0.55, width: 0.16, thick: 0.05 }; // per dark module; sizes in module pitches
-const RING = { scale: 1.4, lift: 0.2 }; // the ring stands 0.4 above the grass
-const DIM = 0.85; // how far the fold sinks the grass beyond the ring into the sky behind it
-const dusk = new THREE.Color();
+const FROND = { count: 7, tilt: 0.8, width: 0.26, thick: 0.1 }; // per dark module; sizes in module pitches
+const RING = { scale: 1.4, lift: 0.2 }; // the ring stands 0.4 above the pad
 
 /** Smooth value noise in [0, 1] for the moss patches. */
 function patch(x: number, z: number): number {
@@ -62,7 +58,7 @@ function growGarden(cells: IslandVoxel[], dark: DarkModule[], size: number, pitc
       out.push({
         x, z, y0: BED, len: (0.45 + hash3(col, 8 + k, row) * 0.2) * pitch, width: FROND.width * pitch, thick: FROND.thick,
         ang: (k / FROND.count) * Math.PI * 2 + turn, tilt: FROND.tilt,
-        colour: new THREE.Color(p.hedge).multiplyScalar(0.85 + hash3(col, 20 + k, row) * 0.35),
+        colour: new THREE.Color(p.hedge).multiplyScalar(0.75 + hash3(col, 20 + k, row) * 0.5),
       });
   }
   const half = (size - 1) / 2;
@@ -96,7 +92,6 @@ function voxelColour(v: IslandVoxel, season: Season, t: number, out: THREE.Color
     case "pad": return out.set(p.moss).multiplyScalar(0.9 + patch(x / 2.5, z / 2.5) * 0.2)
       .lerp(stone.set(PAD).multiplyScalar(0.95 + hash3(x, 1, z) * 0.05), t);
     case "hedge": return out.set(p.hedge).multiplyScalar(0.9 + hash3(x, 2, z) * 0.15);
-    case "grass": return out.set(p.grass[Math.floor(hash3(x, 0, z, 5) * 3)]).lerp(dusk, DIM * t);
     case "dirt": return out.set(p.dirt).multiplyScalar(0.85 + hash3(x, d, z) * 0.2);
     case "mix": return out.set(p.dirt).lerp(stone.set(p.stone), 0.5).multiplyScalar(0.78 + hash3(x, d, z) * 0.25);
     case "stone": return out.set(p.stone).multiplyScalar(0.78 + hash3(x, d, z) * 0.25);
@@ -134,7 +129,6 @@ export default function IslandMesh({
   size,
   pitch,
   season,
-  time,
   fold,
   reducedMotion,
   groupRef,
@@ -146,8 +140,6 @@ export default function IslandMesh({
   /** Module width in world units. */
   pitch: number;
   season: Season;
-  /** Time of day; the folded grass fades toward the sky at that time. */
-  time: number;
   fold: RefObject<FoldState>;
   reducedMotion: boolean;
   /** Everything a tap counts as ground. */
@@ -155,13 +147,12 @@ export default function IslandMesh({
 }) {
   const voxels = useRef<THREE.InstancedMesh>(null);
   const tiles = useRef<THREE.InstancedMesh>(null);
-  const deco = useRef<THREE.InstancedMesh>(null);
   const plants = useRef<THREE.InstancedMesh>(null);
   const water = useRef<THREE.InstancedMesh>(null);
-  const { grass, hedge } = PALETTES[season];
-  const { voxels: cells, deco: decos, waterfall } = island;
-  // Only the pad and the grass top change colour with the fold.
-  const folding = useMemo(() => cells.flatMap((v, i) => (v.kind === "pad" || v.kind === "grass" ? [i] : [])), [cells]);
+  const { hedge } = PALETTES[season];
+  const { voxels: cells, waterfall } = island;
+  // Only the pad changes colour with the fold.
+  const folding = useMemo(() => cells.flatMap((v, i) => (v.kind === "pad" ? [i] : [])), [cells]);
 
   useInstances(voxels, cells.length, (i, o) => {
     const v = cells[i];
@@ -182,29 +173,14 @@ export default function IslandMesh({
   const garden = useMemo(() => growGarden(cells, dark, size, pitch, season), [cells, dark, size, pitch, season]);
   useInstances(plants, garden.length, (i, o) => placeSprig(garden[i], shrinkAt(fold.current.t), o), (i, c) => c.copy(garden[i].colour), [garden]);
 
-  const decoColour = (i: number, t: number, c: THREE.Color) => {
-    const { kind, tint } = decos[i];
-    if (kind === "tuft") c.set(grass[2]).multiplyScalar(0.85);
-    else c.set(season === "WINTER" ? "#dfe8f3" : FLOWERS[Math.floor(tint * 100) % 3]);
-    return c.lerp(dusk, DIM * t);
-  };
-  useInstances(deco, decos.length, (i, o) => {
-    const { x, z, kind, tint } = decos[i];
-    const flower = kind === "flower";
-    o.position.set(x + (tint - 0.9) * 2, flower ? 0.2 : 0.25, z);
-    o.scale.set(flower ? 0.3 : 0.18, flower ? 0.35 : 0.5, flower ? 0.3 : 0.18);
-  }, (i, c) => decoColour(i, fold.current.t, c), [decos, season, grass]);
-
   // The garden follows the fold every frame it moves; the waterfall flows until folded.
   const last = useRef<{ t: number; key: unknown[]; flow: number; shrink: number; plants: unknown }>({ t: NaN, key: [], flow: -1, shrink: NaN, plants: null });
   useFrame(({ clock }) => {
     const { t } = fold.current;
     const l = last.current;
-    const vm = voxels.current, tm = tiles.current, dm = deco.current;
-    const key = [vm, tm, dm, cells, dark, decos, season, time];
+    const vm = voxels.current, tm = tiles.current;
+    const key = [vm, tm, cells, dark, season];
     if (t !== l.t || key.some((k, i) => k !== l.key[i])) {
-      const [r, g, b] = skyState(time).sky[2];
-      dusk.setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace);
       if (vm) {
         for (const i of folding) vm.setColorAt(i, voxelColour(cells[i], season, t, colour));
         if (vm.instanceColor) vm.instanceColor.needsUpdate = true;
@@ -218,10 +194,6 @@ export default function IslandMesh({
         }
         tm.instanceMatrix.needsUpdate = true;
         if (tm.instanceColor) tm.instanceColor.needsUpdate = true;
-      }
-      if (dm) {
-        for (let i = 0; i < decos.length; i++) dm.setColorAt(i, decoColour(i, t, colour));
-        if (dm.instanceColor) dm.instanceColor.needsUpdate = true;
       }
       l.t = t;
       l.key = key;
@@ -238,6 +210,7 @@ export default function IslandMesh({
       l.plants = pm;
     }
     const wm = water.current;
+    if (wm) wm.visible = t < 1; // a stray blue block beside the folded frame otherwise
     const flow = Math.floor(clock.elapsedTime * 8);
     if (wm && !reducedMotion && t < 1 && flow !== l.flow) {
       for (let k = 0; k < waterfall.length; k++) wm.setColorAt(k, colour.set(WATER[(k + flow) % 3]));
@@ -263,12 +236,6 @@ export default function IslandMesh({
       )}
       {garden.length > 0 && (
         <instancedMesh key={`p${garden.length}`} ref={plants} args={[undefined, undefined, garden.length]}>
-          <boxGeometry />
-          <meshLambertMaterial />
-        </instancedMesh>
-      )}
-      {decos.length > 0 && (
-        <instancedMesh key={`d${decos.length}`} ref={deco} args={[undefined, undefined, decos.length]}>
           <boxGeometry />
           <meshLambertMaterial />
         </instancedMesh>

@@ -19,7 +19,7 @@ test("slabHalf follows REF_SIZE and the quiet zone", () => {
   assert.equal(growIsland(3).slabHalf, (REF_SIZE - 1) / 2 + QUIET_ZONE);
 });
 
-test("slab is fully covered by pad, ringed by hedge, and the rest of the top layer is grass", () => {
+test("slab is fully covered by pad and the top layer ends in a hedge ring", () => {
   {
     const size = REF_SIZE;
     for (const seed of seeds) {
@@ -31,7 +31,7 @@ test("slab is fully covered by pad, ringed by hedge, and the rest of the top lay
           assert.equal(top.get(`${x},${z}`), "pad", `size ${size} seed ${seed} cell ${x},${z}`);
       for (const v of voxels)
         if (v.depth === 0 && (Math.abs(v.x) > slabHalf || Math.abs(v.z) > slabHalf))
-          assert.equal(v.kind, Math.max(Math.abs(v.x), Math.abs(v.z)) === slabHalf + 1 ? "hedge" : "grass");
+          assert.ok(v.kind === "hedge" && Math.max(Math.abs(v.x), Math.abs(v.z)) === slabHalf + 1, `seed ${seed} cell ${v.x},${v.z}`);
     }
   }
 });
@@ -40,17 +40,14 @@ test("voxel budget holds", () => {
   for (const seed of seeds) assert.ok(growIsland(seed).voxels.length <= ISLAND_VOXEL_BUDGET);
 });
 
-test("deco and waterfall stay off the slab", () => {
-  {
-    for (const seed of seeds) {
-      const { slabHalf, deco, waterfall } = growIsland(seed);
-      for (const d of deco) assert.ok(Math.abs(d.x) > slabHalf || Math.abs(d.z) > slabHalf);
-      assert.ok(Math.abs(waterfall.x) > slabHalf || Math.abs(waterfall.z) > slabHalf);
-    }
+test("the waterfall falls just outside the island", () => {
+  for (const seed of seeds) {
+    const { slabHalf, waterfall } = growIsland(seed);
+    assert.ok(Math.abs(waterfall.x) > slabHalf + 1 || Math.abs(waterfall.z) > slabHalf + 1);
   }
 });
 
-test("slab corners keep a grass ring and an underside rim beyond them", () => {
+test("slab corners keep the hedge ring and an underside rim beyond them", () => {
   {
     const size = REF_SIZE;
     for (const seed of seeds) {

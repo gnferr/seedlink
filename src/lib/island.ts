@@ -1,93 +1,47 @@
 import { hash3, mulberry32 } from "./rng.ts";
 import { QUIET_ZONE, REF_SIZE } from "./qr.ts";
 
-export type IslandKind = "pad" | "hedge" | "grass" | "dirt" | "mix" | "stone";
+export type IslandKind = "pad" | "hedge" | "dirt" | "mix" | "stone";
 export type IslandVoxel = { x: number; y: number; z: number; depth: number; kind: IslandKind };
-export type Deco = { x: number; z: number; kind: "tuft" | "flower"; tint: number };
 export type Island = {
   slabHalf: number;
   radius: number;
   depth: number;
   voxels: IslandVoxel[];
-  deco: Deco[];
   waterfall: { x: number; z: number; length: number };
 };
 
 export const ISLAND_VOXEL_BUDGET = 6000;
 
-// A wobbly rounded square hugging the QR slab, framed by a one-voxel hedge ring (the fixed REF_SIZE world, see qr.ts), grown from the link's seed.
+// A square island: the QR slab framed by a one-voxel hedge ring, on cliffs that taper to a point below, grown from
+// the link's seed (the fixed REF_SIZE world, see qr.ts).
 export function growIsland(seed: number): Island {
   const slabHalf = (REF_SIZE - 1) / 2 + QUIET_ZONE;
+  const half = slabHalf + 1;
   const r = mulberry32(seed);
-  const inSlab = (x: number, z: number) => Math.abs(x) <= slabHalf && Math.abs(z) <= slabHalf;
-
-  const harm = [3, 4, 5, 7].map((k) => [k, r() / Math.sqrt(k), r() * 6.28] as const);
-  const lobe = r() < 0.6 ? ([r() * 6.28, 0.35 + r() * 0.3, 2 + r() * 3] as const) : null;
   const depth = 12 + Math.floor(r() * 8);
-  const taper = 1 + r() * 0.5;
-  const lean = [(r() - 0.5) * 6, (r() - 0.5) * 6];
+  const taper = 0.8 + r() * 0.4;
 
-  // Superellipse whose exponent grows with the slab so its corners clear the slab corners (plus taper loss).
-  const H = slabHalf + 7;
-  const corner = 1.08 * (slabHalf + 1) * Math.SQRT2 + 3;
-  const p = Math.min(40, Math.max(5, Math.LN2 / Math.log(Math.max(1.0001, (H * Math.SQRT2) / corner))));
-  const rimAt = (a: number) => {
-    const sq = H / Math.pow(Math.abs(Math.cos(a)) ** p + Math.abs(Math.sin(a)) ** p, 1 / p);
-    let v = 0;
-    for (const [k, amp, ph] of harm) v += amp * Math.sin(k * a + ph);
-    let rr = sq + 1.1 * v;
-    if (lobe) {
-      const q = Math.atan2(Math.sin(a - lobe[0]), Math.cos(a - lobe[0]));
-      rr += lobe[2] * Math.exp(-(q * q) / lobe[1] ** 2);
-    }
-    return Math.max(sq - 0.4, rr);
-  };
-  const rim = (x: number, z: number) => rimAt(Math.atan2(z, x));
+  // Half-width of the layer `d` below the top: full for the top two layers, then narrowing, with a ragged edge.
+  const reach = (x: number, z: number, d: number) =>
+    d <= 1 ? half : half - Math.floor(Math.pow((d - 1) / depth, taper) * (half - 2)) - (hash3(x, d, z, seed) > 0.7 ? 1 : 0);
+  const has = (x: number, z: number, d: number) => Math.max(Math.abs(x), Math.abs(z)) <= reach(x, z, d);
 
-  const has = (x: number, z: number, d: number) => {
-    if (d === 0 && inSlab(x, z)) return true;
-    const t = d / (depth + 1);
-    const cx = lean[0] * t;
-    const cz = lean[1] * t;
-    return Math.hypot(x - cx, z - cz) <= rim(x - cx, z - cz) * (1 - Math.pow(t, taper)) - (d > 0 ? hash3(x, d, z, seed) * 1.4 : 0);
-  };
-
-  const span = Math.ceil(slabHalf + 9);
   const voxels: IslandVoxel[] = [];
   for (let d = 0; d <= depth; d++)
-    for (let z = -span; z <= span; z++)
-      for (let x = -span; x <= span; x++) {
+    for (let z = -half; z <= half; z++)
+      for (let x = -half; x <= half; x++) {
         if (!has(x, z, d)) continue;
         const edge = !has(x + 1, z, d) || !has(x - 1, z, d) || !has(x, z + 1, d) || !has(x, z - 1, d);
         if (d > 0 && !edge && d !== depth) continue;
-        const top = inSlab(x, z) ? "pad" : Math.max(Math.abs(x), Math.abs(z)) === slabHalf + 1 ? "hedge" : "grass";
+        const top = Math.max(Math.abs(x), Math.abs(z)) <= slabHalf ? "pad" : "hedge";
         const kind: IslandKind = d === 0 ? top : d <= 2 ? "dirt" : d <= 4 ? "mix" : "stone";
         voxels.push({ x, y: -0.5 - d, z, depth: d, kind });
       }
 
-  const deco: Deco[] = [];
-  for (const v of voxels) {
-    if (v.kind !== "grass") continue;
-    const h = hash3(v.x, 0, v.z, seed + 3);
-    if (h > 0.82) deco.push({ x: v.x, z: v.z, kind: h > 0.95 ? "flower" : "tuft", tint: h });
-  }
+  // The waterfall drops off the +x side (in view), clear of the near corner.
+  const waterfall = { x: half + 1, z: -4 - Math.floor(r() * 9), length: depth + 18 };
 
-  // Waterfall: the far-side rim angle, kept clear of the 45 degree diagonal.
-  let best = -Infinity;
-  let ba = 0;
-  for (let a = -0.4; a < 2; a += 0.05) {
-    if (Math.abs(a - 0.785) < 0.55) continue;
-    const v = (Math.cos(a) + Math.sin(a)) * rimAt(a);
-    if (v > best) {
-      best = v;
-      ba = a;
-    }
-  }
-  const wr = rimAt(ba) + 0.6;
-  const waterfall = { x: Math.round(Math.cos(ba) * wr), z: Math.round(Math.sin(ba) * wr), length: depth + 18 };
-
-  let radius = 0;
-  for (let a = 0; a < 6.283; a += 0.1) radius = Math.max(radius, rimAt(a));
-
-  return { slabHalf, radius, depth, voxels, deco, waterfall };
+  // The camera and tree fit to `radius`: between the edge and the corner, so the square fills the view like the old rim did.
+  return { slabHalf, radius: half * 1.2, depth, voxels, waterfall };
 }

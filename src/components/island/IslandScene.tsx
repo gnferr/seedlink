@@ -171,14 +171,14 @@ export default function IslandScene(props: IslandSceneProps) {
   const treeRef = useRef<THREE.Group>(null);
   const groundRef = useRef<THREE.Group>(null);
   const bobRef = useRef<THREE.Group>(null);
-  // Chunky half-resolution pixels for the tree; the folded code renders at the full device ratio.
+  // The full device ratio (capped at 2) throughout, so the garden's ferns and grass stay sharp.
   const ratio = Math.min(2, window.devicePixelRatio || 1);
 
   return (
     <Canvas
       flat
       gl={{ preserveDrawingBuffer: true, antialias: false }}
-      dpr={phase === "folded" ? ratio : ratio * 0.5}
+      dpr={ratio}
       onCreated={({ gl }) => {
         gl.domElement.style.imageRendering = "pixelated";
         onCanvasReady(gl.domElement);
@@ -189,7 +189,7 @@ export default function IslandScene(props: IslandSceneProps) {
       <Timeline foldRef={fold} folded={folded} reducedMotion={reducedMotion} world={tree} bobRef={bobRef} ratio={ratio} setPhase={setPhase} onPhase={onPhase} />
       <FoldCamera radius={island.radius} crownRadius={tree.crownRadius} size={matrix.size} insets={insets} fold={fold} orbit={phase === "tree"} />
       <group ref={bobRef}>
-        <IslandMesh island={island} dark={dark} size={matrix.size} pitch={pitch} season={season} time={time} fold={fold} reducedMotion={reducedMotion} groupRef={groundRef} />
+        <IslandMesh island={island} dark={dark} size={matrix.size} pitch={pitch} season={season} fold={fold} reducedMotion={reducedMotion} groupRef={groundRef} />
         <TreeMesh tree={tree} pieces={foldPlan.pieces} plan={foldPlan.plan} dark={dark} season={season} leaf={leaf} fold={fold} reducedMotion={reducedMotion} groupRef={treeRef} />
         {!reducedMotion && phase !== "folded" && <Particles tree={tree} season={season} fold={fold} />}
       </group>
