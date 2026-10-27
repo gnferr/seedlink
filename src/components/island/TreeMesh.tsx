@@ -3,6 +3,7 @@
 import { useMemo, useRef, type RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { Toon } from "./toon";
 import { cardShown, inkPose, piecePose, type FoldPiece, type FoldPlan, type Pose } from "@/lib/fold";
 import { INK, treeColours } from "@/lib/palette";
 import type { DarkModule } from "@/lib/qr";
@@ -146,11 +147,11 @@ export default function TreeMesh({
       <group ref={groupRef}>
         <instancedMesh key={`c${cards.length}`} ref={cardMesh} args={[undefined, undefined, cards.length]} frustumCulled={false}>
           <planeGeometry />
-          <meshLambertMaterial map={map} alphaTest={0.5} side={THREE.DoubleSide} />
+          <Toon map={map} alphaTest={0.5} side={THREE.DoubleSide} />
         </instancedMesh>
         <instancedMesh key={`s${segments.length}`} ref={segMesh} args={[undefined, undefined, segments.length]} frustumCulled={false}>
           <boxGeometry />
-          <meshLambertMaterial />
+          <Toon />
         </instancedMesh>
       </group>
       <instancedMesh key={`i${dark.length}`} ref={inkMesh} args={[undefined, undefined, dark.length]} frustumCulled={false}>

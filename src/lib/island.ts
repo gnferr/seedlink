@@ -8,7 +8,6 @@ export type Island = {
   radius: number;
   depth: number;
   voxels: IslandVoxel[];
-  waterfall: { x: number; z: number; length: number };
 };
 
 export const ISLAND_VOXEL_BUDGET = 6000;
@@ -39,9 +38,6 @@ export function growIsland(seed: number): Island {
         voxels.push({ x, y: -0.5 - d, z, depth: d, kind });
       }
 
-  // The waterfall drops off the +x side (in view), clear of the near corner.
-  const waterfall = { x: half + 1, z: -4 - Math.floor(r() * 9), length: depth + 18 };
-
   // The camera and tree fit to `radius`: between the edge and the corner, so the square fills the view like the old rim did.
-  return { slabHalf, radius: half * 1.2, depth, voxels, waterfall };
+  return { slabHalf, radius: half * 1.2, depth, voxels };
 }

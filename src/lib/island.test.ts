@@ -40,13 +40,6 @@ test("voxel budget holds", () => {
   for (const seed of seeds) assert.ok(growIsland(seed).voxels.length <= ISLAND_VOXEL_BUDGET);
 });
 
-test("the waterfall falls just outside the island", () => {
-  for (const seed of seeds) {
-    const { slabHalf, waterfall } = growIsland(seed);
-    assert.ok(Math.abs(waterfall.x) > slabHalf + 1 || Math.abs(waterfall.z) > slabHalf + 1);
-  }
-});
-
 test("slab corners keep the hedge ring and an underside rim beyond them", () => {
   {
     const size = REF_SIZE;
