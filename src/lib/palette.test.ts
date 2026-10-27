@@ -12,6 +12,13 @@ test("INK on PAD has generous contrast", () => {
   assert.ok(contrastRatio(lum(INK), lum(PAD)) >= 3 * MIN_SCAN_CONTRAST);
 });
 
+test("hedge on moss hides the code: visible but far below scan contrast", () => {
+  for (const s of seasons) {
+    const c = contrastRatio(lum(PALETTES[s].hedge), lum(PALETTES[s].moss));
+    assert.ok(c > 1.5 && c < contrastRatio(lum(INK), lum(PAD)) / 2, `${s} ${c}`);
+  }
+});
+
 test("INK differs from every grass colour", () => {
   for (const s of seasons) for (const g of PALETTES[s].grass) assert.notEqual(g, INK);
 });

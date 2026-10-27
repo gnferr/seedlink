@@ -69,10 +69,12 @@ for (const s of SPECIES) {
   test(`${s}: fitTree sizes the crown to the island, capped in height, purely`, () => {
     for (const seed of [1, 7, 42]) {
       const t = growTree(s, seed), before = structuredClone(t), f = fitTree(t, 30);
-      const crown = (s === "birch" ? 1.1 : 1.5) * 30, cap = MAX_TOP_TO_ISLAND * 30;
-      // The crown ratio holds unless that would make the tree taller than the cap; then the top sits on the cap.
+      const crown = (s === "birch" ? 1.35 : 1.5) * 30, cap = MAX_TOP_TO_ISLAND * 30;
+      // The crown ratio holds unless that would make the tree taller than the cap; then the top sits on the cap and
+      // the crown spreads sideways back toward its width, never past it.
       assert.ok(f.top <= cap + 1e-6);
-      assert.ok(Math.abs(f.crownRadius - crown) < 1e-6 || (Math.abs(f.top - cap) < 1e-6 && f.crownRadius < crown));
+      const shrunk = t.crownRadius * (cap / t.top);
+      assert.ok(Math.abs(f.crownRadius - crown) < 1e-6 || (Math.abs(f.top - cap) < 1e-6 && f.crownRadius >= shrunk - 1e-6 && f.crownRadius <= crown + 1e-6));
       assert.equal(f.cards.length, t.cards.length);
       assert.equal(f.segments.length, t.segments.length);
       assert.deepEqual(t, before);
@@ -80,6 +82,13 @@ for (const s of SPECIES) {
     }
   });
 }
+
+test("a birch shortened by the height cap spreads wider than a plain shrink", () => {
+  const cap = MAX_TOP_TO_ISLAND * 30;
+  const capped = [1, 2, 3, 4, 5, 6, 7, 8].map((seed) => growTree("birch", seed)).find((t) => fitTree(t, 30).top >= cap - 1e-6);
+  assert.ok(capped, "some birch reaches the cap");
+  assert.ok(fitTree(capped, 30).crownRadius > capped.crownRadius * (cap / capped.top) * 1.05);
+});
 
 test("only birch, the tallest species, is ever shortened by the height cap", () => {
   for (const s of SPECIES) for (let seed = 1; seed <= 40; seed++) {
