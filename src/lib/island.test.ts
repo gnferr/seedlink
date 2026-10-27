@@ -19,7 +19,7 @@ test("slabHalf follows REF_SIZE and the quiet zone", () => {
   assert.equal(growIsland(3).slabHalf, (REF_SIZE - 1) / 2 + QUIET_ZONE);
 });
 
-test("slab is fully covered by pad and the rest of the top layer is grass", () => {
+test("slab is fully covered by pad, ringed by hedge, and the rest of the top layer is grass", () => {
   {
     const size = REF_SIZE;
     for (const seed of seeds) {
@@ -31,7 +31,7 @@ test("slab is fully covered by pad and the rest of the top layer is grass", () =
           assert.equal(top.get(`${x},${z}`), "pad", `size ${size} seed ${seed} cell ${x},${z}`);
       for (const v of voxels)
         if (v.depth === 0 && (Math.abs(v.x) > slabHalf || Math.abs(v.z) > slabHalf))
-          assert.equal(v.kind, "grass");
+          assert.equal(v.kind, Math.max(Math.abs(v.x), Math.abs(v.z)) === slabHalf + 1 ? "hedge" : "grass");
     }
   }
 });

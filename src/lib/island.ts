@@ -1,7 +1,7 @@
 import { hash3, mulberry32 } from "./rng.ts";
 import { QUIET_ZONE, REF_SIZE } from "./qr.ts";
 
-export type IslandKind = "pad" | "grass" | "dirt" | "mix" | "stone";
+export type IslandKind = "pad" | "hedge" | "grass" | "dirt" | "mix" | "stone";
 export type IslandVoxel = { x: number; y: number; z: number; depth: number; kind: IslandKind };
 export type Deco = { x: number; z: number; kind: "tuft" | "flower"; tint: number };
 export type Island = {
@@ -15,7 +15,7 @@ export type Island = {
 
 export const ISLAND_VOXEL_BUDGET = 6000;
 
-// A wobbly rounded square hugging the QR slab (the fixed REF_SIZE world, see qr.ts), grown from the link's seed.
+// A wobbly rounded square hugging the QR slab, framed by a one-voxel hedge ring (the fixed REF_SIZE world, see qr.ts), grown from the link's seed.
 export function growIsland(seed: number): Island {
   const slabHalf = (REF_SIZE - 1) / 2 + QUIET_ZONE;
   const r = mulberry32(seed);
@@ -60,7 +60,8 @@ export function growIsland(seed: number): Island {
         if (!has(x, z, d)) continue;
         const edge = !has(x + 1, z, d) || !has(x - 1, z, d) || !has(x, z + 1, d) || !has(x, z - 1, d);
         if (d > 0 && !edge && d !== depth) continue;
-        const kind: IslandKind = d === 0 ? (inSlab(x, z) ? "pad" : "grass") : d <= 2 ? "dirt" : d <= 4 ? "mix" : "stone";
+        const top = inSlab(x, z) ? "pad" : Math.max(Math.abs(x), Math.abs(z)) === slabHalf + 1 ? "hedge" : "grass";
+        const kind: IslandKind = d === 0 ? top : d <= 2 ? "dirt" : d <= 4 ? "mix" : "stone";
         voxels.push({ x, y: -0.5 - d, z, depth: d, kind });
       }
 

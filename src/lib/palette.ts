@@ -4,15 +4,16 @@ import type { Species } from "./tree.ts";
 export const INK = "#2a2140";
 export const PAD = "#e6e0ef";
 
-export type SeasonPalette = { grass: [string, string, string]; dirt: string; stone: string; leaf: string; trunk: string; particle: string; particleKind: "petal" | "firefly" | "leaf" | "snow" };
+// moss and hedge hide the code in the tree state (low contrast); the fold turns them PAD and INK.
+export type SeasonPalette = { grass: [string, string, string]; moss: string; hedge: string; dirt: string; stone: string; leaf: string; trunk: string; particle: string; particleKind: "petal" | "firefly" | "leaf" | "snow" };
 
 const common = { stone: "#8d84a0", trunk: "#5a3b2e" };
 
 export const PALETTES: Record<Season, SeasonPalette> = {
-  SPRING: { ...common, grass: ["#7cc47a", "#8fd18a", "#6ab36a"], dirt: "#9a6a48", leaf: "#f58cb4", particle: "#ffd0e2", particleKind: "petal" },
-  SUMMER: { ...common, grass: ["#4fa04e", "#5fb35a", "#438a45"], dirt: "#8f6040", leaf: "#4fae5e", particle: "#fff3a0", particleKind: "firefly" },
-  AUTUMN: { ...common, grass: ["#a89a4a", "#b8a855", "#8f8640"], dirt: "#8a5640", leaf: "#e8662a", particle: "#f2913a", particleKind: "leaf" },
-  WINTER: { ...common, grass: ["#eef3fa", "#f7faff", "#dfe8f3"], dirt: "#5a4448", leaf: "#eef4fc", particle: "#ffffff", particleKind: "snow" },
+  SPRING: { ...common, grass: ["#7cc47a", "#8fd18a", "#6ab36a"], moss: "#a3d99a", hedge: "#5a9c58", dirt: "#9a6a48", leaf: "#f58cb4", particle: "#ffd0e2", particleKind: "petal" },
+  SUMMER: { ...common, grass: ["#4fa04e", "#5fb35a", "#438a45"], moss: "#79b86a", hedge: "#3f8040", dirt: "#8f6040", leaf: "#4fae5e", particle: "#fff3a0", particleKind: "firefly" },
+  AUTUMN: { ...common, grass: ["#a89a4a", "#b8a855", "#8f8640"], moss: "#c2b46a", hedge: "#7d7436", dirt: "#8a5640", leaf: "#e8662a", particle: "#f2913a", particleKind: "leaf" },
+  WINTER: { ...common, grass: ["#eef3fa", "#f7faff", "#dfe8f3"], moss: "#f2f6fb", hedge: "#6f8a7a", dirt: "#5a4448", leaf: "#eef4fc", particle: "#ffffff", particleKind: "snow" },
 };
 
 export const LEAF_SWATCHES: readonly { name: string; hex: string }[] = [
