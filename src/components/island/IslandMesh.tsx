@@ -5,6 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { Toon } from "./toon";
 import { grassTexture } from "./grassTexture";
+import { groundTexture } from "./groundTexture";
 import type { Island, IslandVoxel } from "@/lib/island";
 import { INK, PAD, PALETTES, type SeasonPalette } from "@/lib/palette";
 import type { DarkModule } from "@/lib/qr";
@@ -207,21 +208,40 @@ function blend(p: SeasonPalette, x: number, z: number, toward: number): THREE.Co
 /** Plants are gone by this far into the fold. */
 const shrinkAt = (t: number) => Math.max(0, 1 - t * 1.6);
 
+/**
+ * Baked soft shade over the top: darker beside dense fern clumps and round the tree's foot, plus broad sun and
+ * shade patches. 1 is full light.
+ */
+function shadeField(dark: DarkModule[], size: number, pitch: number) {
+  const half = (size - 1) / 2;
+  const isDark = new Set(dark.map((d) => d.row * size + d.col));
+  return (x: number, z: number) => {
+    const col = Math.round(x / pitch + half), row = Math.round(z / pitch + half);
+    let n = 0;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (isDark.has((row + dz) * size + col + dx)) n++;
+    const trunk = Math.exp(-(x * x + z * z) / 14);
+    return Math.max(0.4, 1.1 - 0.6 * (n / 9) - 0.5 * trunk - (0.5 - patch(x / 7 + 50, z / 7)) * 0.5);
+  };
+}
+
+/** Cliffs darken under the island's lip and toward the bottom. */
+const cliffShade = (depth: number) => (depth <= 1 ? 0.45 : Math.max(0.4, 1 - 0.06 * depth));
+
 /** Moss creeping down the upper cliffs in patches. */
 const mossy = (c: THREE.Color, { x, y, z, depth }: IslandVoxel, hedge: string) =>
   depth <= 4 && patch(x / 2 + z / 3, y + z / 2) > 0.62 - depth * 0.04 ? c.lerp(stone.set(hedge), 0.6) : c;
 
-function voxelColour(v: IslandVoxel, season: Season, t: number, out: THREE.Color) {
+function voxelColour(v: IslandVoxel, season: Season, t: number, out: THREE.Color, light = 1) {
   const p = PALETTES[season];
   const { x, z, depth: d } = v;
   switch (v.kind) {
     case "pad": return out.set(p.moss).lerp(stone.set(p.hedge), patch(x / 5 + 9, z / 5) * 0.35).lerp(warm, season === "WINTER" ? 0 : 0.12)
-      .multiplyScalar(0.9 + patch(x / 2.5, z / 2.5) * 0.2)
+      .multiplyScalar((0.9 + patch(x / 2.5, z / 2.5) * 0.2) * light)
       .lerp(stone.set(PAD).multiplyScalar(0.95 + hash3(x, 1, z) * 0.05), t);
     case "hedge": return out.set(p.hedge).multiplyScalar(0.9 + hash3(x, 2, z) * 0.15);
-    case "dirt": return mossy(out.set(p.dirt).multiplyScalar(0.85 + hash3(x, d, z) * 0.2), v, p.hedge);
-    case "mix": return mossy(out.set(p.dirt).lerp(stone.set(p.stone), 0.5).multiplyScalar(0.78 + hash3(x, d, z) * 0.25), v, p.hedge);
-    case "stone": return out.set(p.stone).multiplyScalar(0.78 + hash3(x, d, z) * 0.25);
+    case "dirt": return mossy(out.set(p.dirt).multiplyScalar(0.85 + hash3(x, d, z) * 0.2), v, p.hedge).multiplyScalar(light);
+    case "mix": return mossy(out.set(p.dirt).lerp(stone.set(p.stone), 0.5).multiplyScalar(0.78 + hash3(x, d, z) * 0.25), v, p.hedge).multiplyScalar(light);
+    case "stone": return out.set(p.stone).multiplyScalar((0.78 + hash3(x, d, z) * 0.25) * light);
   }
 }
 
@@ -274,6 +294,8 @@ export default function IslandMesh({
   const tiles = useRef<THREE.InstancedMesh>(null);
   const plants = useRef<THREE.InstancedMesh>(null);
   const grassCards = useRef<THREE.InstancedMesh>(null);
+  const ground = useRef<THREE.InstancedMesh>(null);
+  const groundMap = useMemo(() => groundTexture(), []);
   const grassMap = useMemo(() => grassTexture(), []);
   // Grass cards light like the ground they stand on, not like a wall facing sideways.
   const cardGeometry = useMemo(() => {
@@ -286,12 +308,27 @@ export default function IslandMesh({
   const { voxels: cells } = island;
   // Only the pad changes colour with the fold.
   const folding = useMemo(() => cells.flatMap((v, i) => (v.kind === "pad" ? [i] : [])), [cells]);
+  const shade = useMemo(() => shadeField(dark, size, pitch), [dark, size, pitch]);
+  const light = useMemo(() => cells.map((v) =>
+    v.kind === "pad" ? shade(v.x, v.z) : v.kind === "hedge" ? 1 : cliffShade(v.depth)), [cells, shade]);
+
+  // Ground cover on the meadow floor: a ground-texture tile on every pad cell, spun and flipped so neighbours differ,
+  // tinted from the moss below so its strokes read lighter and darker. It shrinks away with the plants.
+  const cover = useMemo(() => folding.map((i) => ({ x: cells[i].x, z: cells[i].z, turn: Math.floor(hash3(cells[i].x, 95, cells[i].z) * 4), flip: hash3(cells[i].x, 96, cells[i].z) > 0.5 ? -1 : 1, i })), [folding, cells]);
+  const placeCover = (k: number, s: number, o: THREE.Object3D) => {
+    const c = cover[k];
+    o.position.set(c.x, 0.02, c.z);
+    o.rotation.set(-Math.PI / 2, 0, (c.turn * Math.PI) / 2);
+    o.scale.set(Math.max(1e-4, s) * c.flip, Math.max(1e-4, s), 1);
+  };
+  useInstances(ground, cover.length, (k, o) => placeCover(k, shrinkAt(fold.current.t), o),
+    (k, c) => voxelColour(cells[cover[k].i], season, 0, c, light[cover[k].i]).multiplyScalar(1.3), [cover, season, light]);
 
   useInstances(voxels, cells.length, (i, o) => {
     const v = cells[i];
     o.position.set(v.x, v.y + (v.kind === "hedge" ? RING.lift : 0), v.z);
     if (v.kind === "hedge") o.scale.y = RING.scale;
-  }, (i, c) => voxelColour(cells[i], season, fold.current.t, c), [cells, season]);
+  }, (i, c) => voxelColour(cells[i], season, fold.current.t, c, light[i]), [cells, season, light]);
 
   const tilePlace = (i: number, t: number, o: THREE.Object3D) => {
     const h = THREE.MathUtils.lerp(BED, TILE.height, t);
@@ -303,7 +340,11 @@ export default function IslandMesh({
   useInstances(tiles, dark.length, (i, o) => tilePlace(i, fold.current.t, o), (i, c) => tileColour(i, fold.current.t, c),
     [dark, size, hedge]);
 
-  const garden = useMemo(() => growGarden(cells, dark, size, pitch, season), [cells, dark, size, pitch, season]);
+  const garden = useMemo(() => {
+    const g = growGarden(cells, dark, size, pitch, season);
+    for (const p of [...g.sprigs, ...g.cards]) if (p.y0 >= 0) p.colour.multiplyScalar(shade(p.x, p.z));
+    return g;
+  }, [cells, dark, size, pitch, season, shade]);
   const { sprigs, cards } = garden;
   useInstances(plants, sprigs.length, (i, o) => placeSprig(sprigs[i], shrinkAt(fold.current.t), o), (i, c) => c.copy(sprigs[i].colour), [sprigs]);
   useInstances(grassCards, cards.length, (i, o) => placeCard(cards[i], shrinkAt(fold.current.t), o), (i, c) => c.copy(cards[i].colour), [cards]);
@@ -314,10 +355,10 @@ export default function IslandMesh({
     const { t } = fold.current;
     const l = last.current;
     const vm = voxels.current, tm = tiles.current;
-    const key = [vm, tm, cells, dark, season];
+    const key = [vm, tm, cells, dark, season, light];
     if (t !== l.t || key.some((k, i) => k !== l.key[i])) {
       if (vm) {
-        for (const i of folding) vm.setColorAt(i, voxelColour(cells[i], season, t, colour));
+        for (const i of folding) vm.setColorAt(i, voxelColour(cells[i], season, t, colour, light[i]));
         if (vm.instanceColor) vm.instanceColor.needsUpdate = true;
       }
       if (tm) {
@@ -333,8 +374,14 @@ export default function IslandMesh({
       l.t = t;
       l.key = key;
     }
-    const pm = plants.current, cm = grassCards.current, shrink = shrinkAt(t);
-    if (pm && cm && (shrink !== l.shrink || pm !== l.plants || cm !== l.cards)) {
+    const pm = plants.current, cm = grassCards.current, gm = ground.current, shrink = shrinkAt(t);
+    if (pm && cm && gm && (shrink !== l.shrink || pm !== l.plants || cm !== l.cards)) {
+      for (let k = 0; k < cover.length; k++) {
+        placeCover(k, shrink, reset(dummy));
+        dummy.updateMatrix();
+        gm.setMatrixAt(k, dummy.matrix);
+      }
+      gm.instanceMatrix.needsUpdate = true;
       for (let i = 0; i < sprigs.length; i++) {
         placeSprig(sprigs[i], shrink, reset(dummy));
         dummy.updateMatrix();
@@ -369,6 +416,12 @@ export default function IslandMesh({
         <instancedMesh key={`p${sprigs.length}`} ref={plants} args={[undefined, undefined, sprigs.length]}>
           <boxGeometry />
           <Toon />
+        </instancedMesh>
+      )}
+      {cover.length > 0 && (
+        <instancedMesh key={`c${cover.length}`} ref={ground} args={[undefined, undefined, cover.length]}>
+          <planeGeometry />
+          <Toon map={groundMap} alphaTest={0.5} side={THREE.DoubleSide} />
         </instancedMesh>
       )}
       {cards.length > 0 && (

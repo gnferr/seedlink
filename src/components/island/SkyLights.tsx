@@ -7,8 +7,8 @@ import { skyState, type RGB } from "@/lib/daycycle";
 import { easeInOutCubic } from "@/lib/fold";
 import type { FoldState } from "./IslandScene";
 
-// Today's neutral rig: the folded pad is lit exactly like this at fold t = 1, at any time of day.
-const SKY = new THREE.Color("#b8b0ff"), GROUND = new THREE.Color("#2a2140"), HEMI = 1.1;
+// The neutral rig, a warm sky so the cream pad reads cream: the folded pad is lit exactly like this at fold t = 1, at any time of day.
+const SKY = new THREE.Color("#ffe8c4"), GROUND = new THREE.Color("#2a2140"), HEMI = 1.1;
 const KEY = new THREE.Color("#fff4e0"), KEY_I = 1.6, KEY_POS = new THREE.Vector3(30, 50, -10);
 const FILL = new THREE.Color("#9ec5ff"), FILL_I = 0.5, FILL_POS = new THREE.Vector3(-30, 20, 30);
 
