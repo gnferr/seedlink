@@ -75,7 +75,7 @@ export default function Particles({ tree, season, time: dayTime, fold }: { tree:
       drift.xz[i * 2 + 1] += wz * dt * carry;
       dummy.position.set(x, y, z);
       dummy.rotation.set(time * b * (tuft ? 0.3 : 1), time * c, 0);
-      s = Math.max(1e-4, s * hide);
+      s = Math.max(1e-4, s * hide * (kind === "pollen" ? 1.8 : 1)); // summer motes are tiny otherwise
       if (tuft) dummy.scale.set(s * 2.2, s * 0.7, s * 2.2); // a soft flat puff
       else dummy.scale.setScalar(s);
       dummy.updateMatrix();
