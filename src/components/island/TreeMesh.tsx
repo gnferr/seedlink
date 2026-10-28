@@ -4,6 +4,10 @@ import { useMemo, useRef, type RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { Toon } from "./toon";
+
+const SUN_WARM = ["#1f4f45", "#2f6b4a", "#4a8a48", "#7fb04a", "#b8d062", "#e2e88a"];
+const SUN_COOL = ["#1c4a52", "#28644f", "#3d7f57", "#5f9e5c", "#8fbf6a", "#bfdc8a"];
+const BLOSSOM = "#fff6dc", BERRY = "#f08a6a";
 import { cardShown, inkPose, piecePose, type FoldPiece, type FoldPlan, type Pose } from "@/lib/fold";
 import { INK, treeColours } from "@/lib/palette";
 import type { DarkModule } from "@/lib/qr";
@@ -57,13 +61,25 @@ export default function TreeMesh({
   // Per-instance colour and the cards shown this season (beyond leafKeep, or specks with no colour, are hidden).
   const look = useMemo(() => {
     const c = treeColours(season, tree.species, leaf);
-    const cardColour = cards.map((k) => k.speck ? c.speck ?? "#000" : c.leaves[Math.min(c.leaves.length - 1, Math.floor(k.shade * c.leaves.length))]);
+    const pick = (ramp: string[], v: number) => ramp[Math.min(ramp.length - 1, Math.max(0, Math.floor(v * ramp.length)))];
+    // Summer crowns (unless a leaf colour is picked) light from sunlit tops to shaded insides, in warm and cool
+    // clusters, with the odd blossom or berry.
+    const sunny = season === "SUMMER" && !leaf;
+    const top = Math.max(1, ...cards.map((k) => k.y));
+    const cardColour = cards.map((k, i) => {
+      if (k.speck) return c.speck ?? "#000";
+      if (!sunny) return pick(c.leaves, k.shade);
+      if (hash3(i, 11, 3) > 0.94) return hash3(i, 12, 3) > 0.5 ? BLOSSOM : BERRY;
+      const warm = hash3(Math.floor(k.x / 3), 7, Math.floor(k.z / 3)) > 0.5;
+      return pick(warm ? SUN_WARM : SUN_COOL, 0.45 * k.shade + 0.55 * (k.y / top));
+    });
     const shown = cards.map((k, i) => (k.speck ? c.speck !== null : cardShown(i, c.leafKeep)));
     const segColour = segments.map((g, j) => {
       const len = Math.hypot(g.x1 - g.x0, g.y1 - g.y0, g.z1 - g.z0), r = (g.r0 + g.r1) / 2;
       // Snow lies on the flatter limbs; birch bark gets dark marks; thin limbs are twig-coloured.
       if (c.snowCap && Math.abs(g.y1 - g.y0) < len * 0.6) return c.snowCap;
       if (c.barkMarks && r > 0.15 && hash3(j, 5, 9, 31) < 0.3) return c.barkMarks;
+      if (sunny && !c.barkMarks) return r < 0.18 ? "#5a3a26" : hash3(j, 6, 9, 31) < 0.3 ? "#8a5a3a" : "#6b4630"; // warm bark, light streaks
       return r < 0.18 ? c.twig : c.bark;
     });
     return { cardColour, shown, segColour };

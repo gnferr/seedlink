@@ -2,7 +2,7 @@ import type { Season } from "./seasons.ts";
 import type { Species } from "./tree.ts";
 
 export const INK = "#2a2140";
-export const PAD = "#e6e0ef";
+export const PAD = "#f3ecd8";
 
 // moss and hedge hide the code in the tree state (low contrast); the fold turns them PAD and INK.
 export type SeasonPalette = { grass: [string, string, string]; moss: string; hedge: string; dirt: string; stone: string; leaf: string; trunk: string; particle: string; particleKind: "petal" | "firefly" | "leaf" | "snow" };
