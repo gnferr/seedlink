@@ -8,8 +8,7 @@ import { Toon, windAt } from "./toon";
 const SUN_WARM = ["#1f4f45", "#2f6b4a", "#4a8a48", "#7fb04a", "#b8d062", "#e2e88a"];
 const SUN_COOL = ["#1c4a52", "#28644f", "#3d7f57", "#5f9e5c", "#8fbf6a", "#bfdc8a"];
 const BLOSSOM = "#fff6dc", BERRY = "#f08a6a";
-const PALE = new THREE.Color("#f4f6d8"); // a leaf flipped by the gust shows its paler underside
-const LEAN = 0.1; // crown tip lean per unit of wind, as a share of the tree's height ("soft")
+const BEND = 0.06; // how far the treetop leans per unit of wind, as a share of the tree's height
 import { cardShown, inkPose, piecePose, type FoldPiece, type FoldPlan, type Pose } from "@/lib/fold";
 import { INK, treeColours } from "@/lib/palette";
 import type { DarkModule } from "@/lib/qr";
@@ -29,14 +28,17 @@ const dir = new THREE.Vector3();
 const colour = new THREE.Color();
 // A collapsed instance still needs an invertible matrix for raycasts.
 const nz = (s: number) => s || 1e-4;
+const end = new THREE.Vector3();
 
-/** Springs piece `i`'s wind lean (x, z, and their speeds in `s`) toward the wind's push, overshooting a little as a gust passes. */
-function spring(s: Float32Array, i: number, tx: number, tz: number, dt: number) {
-  const o = i * 4;
-  s[o + 2] += ((tx - s[o]) * 18 - s[o + 2] * 4.5) * dt;
-  s[o + 3] += ((tz - s[o + 1]) * 18 - s[o + 3] * 4.5) * dt;
-  s[o] += s[o + 2] * dt;
-  s[o + 1] += s[o + 3] * dt;
+/**
+ * Where the wind moves a point of the tree: the whole tree bends like a rod from its base (`lean` is the top's push),
+ * plus a slow ripple shared by neighbouring branches. Every piece uses this one field, so joints stay joined.
+ */
+function bent(x: number, y: number, z: number, top: number, lean: { x: number; z: number }, time: number, out: THREE.Vector3) {
+  const w = Math.max(0, y / top) ** 2;
+  const ripple = Math.sin(time * 1.1 + x * 0.12 + z * 0.09) * 0.015 * top * w;
+  const dx = lean.x * w + ripple, dz = lean.z * w + ripple * 0.5;
+  return out.set(dx, -(dx * dx + dz * dz) / (2 * Math.max(1, y)), dz); // bending, not stretching: the tip dips a little
 }
 
 /** The tree (leaf cards and branch segments) at the fold time in `fold`, and one ink block per dark module. */
@@ -93,8 +95,7 @@ export default function TreeMesh({
       if (sunny && !c.barkMarks) return r < 0.18 ? "#5a3a26" : hash3(j, 6, 9, 31) < 0.3 ? "#8a5a3a" : "#6b4630"; // warm bark, light streaks
       return r < 0.18 ? c.twig : c.bark;
     });
-    const pale = cardColour.map((h) => new THREE.Color(h).lerp(PALE, 0.45));
-    return { cardColour, pale, shown, segColour };
+    return { cardColour, shown, segColour };
   }, [season, leaf, tree.species, cards, segments]);
 
   // Segment rest shape: unit box -> length along the limb, width from its radii.
@@ -104,11 +105,11 @@ export default function TreeMesh({
     return { len, width: g.r0 + g.r1, q: new THREE.Quaternion().setFromUnitVectors(UP, dir.normalize()) };
   }), [segments]);
 
-  // Each piece's springy wind lean, and which leaves the gust has flipped.
-  const gusts = useRef({ lean: new Float32Array(0), flipped: new Uint8Array(0) });
+  // The treetop's push from the wind, eased by a soft spring so the tree leans into a gust and settles after it.
+  const lean = useRef({ x: 0, z: 0, vx: 0, vz: 0 });
 
-  // Matrices every frame while 0 < t < 1, once on reaching 0 or 1 or on a change; in the tree state the crown and
-  // limbs ride the garden's wind every frame (the gust rolls through the crown, flipping some leaves pale).
+  // Matrices every frame while 0 < t < 1, once on reaching 0 or 1 or on a change; in the tree state the whole tree
+  // bends in the garden's wind every frame, and leaves flutter on their stems harder in a gust.
   useFrame(({ clock }, delta) => {
     const cm = cardMesh.current, sm = segMesh.current, im = inkMesh.current;
     if (!cm || !sm || !im) return;
@@ -118,52 +119,62 @@ export default function TreeMesh({
     const recolour = look !== l.look || cm !== l.cm || sm !== l.sm;
     const full = t !== l.t || recolour || plan !== l.plan || im !== l.im;
     if (!full && !sway && !l.sway) return;
-    const time = clock.elapsedTime, n = cards.length, dt = Math.min(delta, 0.05), reach = tree.top * LEAN;
-    if (gusts.current.lean.length !== (n + segments.length) * 4) gusts.current = { lean: new Float32Array((n + segments.length) * 4), flipped: new Uint8Array(n) };
-    const { lean, flipped } = gusts.current;
-    let flips = false;
+    const time = clock.elapsedTime, n = cards.length, L = lean.current;
+    let gust = 0;
+    if (sway) {
+      const dt = Math.min(delta, 0.05), [wx, wz] = windAt(0, 0), reach = tree.top * BEND;
+      gust = Math.min(1, Math.max(0, (Math.hypot(wx, wz) - 0.3) / 1.5));
+      L.vx += ((wx * reach - L.x) * 5 - L.vx * 3.6) * dt; // nearly critically damped: one small overshoot
+      L.vz += ((wz * reach - L.z) * 5 - L.vz * 3.6) * dt;
+      L.x += L.vx * dt;
+      L.z += L.vz * dt;
+    }
 
     for (let i = 0; i < n; i++) {
       const k = cards[i];
       piecePose(plan, pieces, dark, i, t, pose);
-      let flip = 0;
-      if (sway && !k.speck) {
-        const w = (k.y / tree.top) ** 2, ph = (i * 2.39) % 6.28;
-        const [wx, wz] = windAt(k.x, k.z), gust = Math.min(1, Math.max(0, (Math.hypot(wx, wz) - 0.3) / 1.5));
-        spring(lean, i, wx * w * reach, wz * w * reach, dt);
-        pose.x += lean[i * 4] + (Math.sin(time * 9 + ph) * 0.05 * (1 + gust * 4) + Math.sin(time * 22) * poke * 0.3) * w;
-        pose.y += Math.cos(time * 7 + ph) * 0.04 * (1 + gust * 3) * w;
-        pose.z += lean[i * 4 + 1];
-        flip = gust * Math.sin(time * 11 + ph * 3) > 0.35 ? 1 : 0;
+      let flutter = 0, turn = 0;
+      if (sway) {
+        bent(k.x, k.y, k.z, tree.top, L, time, end);
+        pose.x += end.x + Math.sin(time * 22) * poke * 0.3 * (k.y / tree.top) ** 2;
+        pose.y += end.y;
+        pose.z += end.z;
+        // Leaves twist on their stems (catching a lighter or darker band of the toon light), more in a gust.
+        const ph = (i * 2.39) % 6.28, a = 0.06 + gust * 0.3;
+        flutter = Math.sin(time * (4 + ph * 0.5) + ph) * a;
+        turn = Math.cos(time * 3.3 + ph * 2) * a * 0.6;
       }
       card.position.set(pose.x, pose.y, pose.z);
-      card.rotation.set(k.tilt, k.rotY + pose.rotY, pose.rotY * 0.5);
+      card.rotation.set(k.tilt + flutter, k.rotY + pose.rotY + turn, pose.rotY * 0.5);
       card.scale.setScalar(nz(look.shown[i] ? k.size * pose.sx : 0));
       card.updateMatrix();
       cm.setMatrixAt(i, card.matrix);
-      if (recolour || flip !== flipped[i]) {
-        cm.setColorAt(i, flip ? look.pale[i] : colour.set(look.cardColour[i]));
-        flipped[i] = flip;
-        flips = true;
-      }
+      if (recolour) cm.setColorAt(i, colour.set(look.cardColour[i]));
     }
     cm.instanceMatrix.needsUpdate = true;
-    if (flips && cm.instanceColor) cm.instanceColor.needsUpdate = true;
+    if (recolour && cm.instanceColor) cm.instanceColor.needsUpdate = true;
 
     if (full || sway || l.sway) {
       for (let j = 0; j < segments.length; j++) {
         const b = segBase[j], g = segments[j];
         piecePose(plan, pieces, dark, n + j, t, pose);
+        let len = b.len;
+        dummy.quaternion.copy(b.q);
         if (sway) {
-          const mx = (g.x0 + g.x1) / 2, mz = (g.z0 + g.z1) / 2, w = ((g.y0 + g.y1) / 2 / tree.top) ** 2;
-          const [wx, wz] = windAt(mx, mz);
-          spring(lean, n + j, wx * w * reach, wz * w * reach, dt);
-          pose.x += lean[(n + j) * 4];
-          pose.z += lean[(n + j) * 4 + 1];
+          // Rebuild the limb between its two bent ends, so it tilts with the bend and stays joined to its neighbours.
+          bent(g.x0, g.y0, g.z0, tree.top, L, time, end);
+          const ax = g.x0 + end.x, ay = g.y0 + end.y, az = g.z0 + end.z, mx = end.x, my = end.y, mz = end.z;
+          bent(g.x1, g.y1, g.z1, tree.top, L, time, end);
+          dir.set(g.x1 + end.x - ax, g.y1 + end.y - ay, g.z1 + end.z - az);
+          len = dir.length() || 1e-3;
+          dummy.quaternion.setFromUnitVectors(UP, dir.normalize());
+          pose.x += (mx + end.x) / 2;
+          pose.y += (my + end.y) / 2;
+          pose.z += (mz + end.z) / 2;
         }
         dummy.position.set(pose.x, pose.y, pose.z);
-        dummy.quaternion.copy(b.q).premultiply(spin.setFromAxisAngle(UP, pose.rotY));
-        dummy.scale.set(nz(b.width * pose.sx), nz(b.len * pose.sx), nz(b.width * pose.sx));
+        dummy.quaternion.premultiply(spin.setFromAxisAngle(UP, pose.rotY));
+        dummy.scale.set(nz(b.width * pose.sx), nz(len * pose.sx), nz(b.width * pose.sx));
         dummy.updateMatrix();
         sm.setMatrixAt(j, dummy.matrix);
         if (recolour) sm.setColorAt(j, colour.set(look.segColour[j]));
