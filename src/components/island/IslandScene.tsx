@@ -18,7 +18,7 @@ import IslandMesh from "./IslandMesh";
 import Life from "./Life";
 import Particles from "./Particles";
 import SkyDome from "./SkyDome";
-import { Wind } from "./toon";
+import { tapMeadow, Wind } from "./toon";
 import SkyLights from "./SkyLights";
 import TreeMesh from "./TreeMesh";
 
@@ -91,7 +91,7 @@ function Taps({ phase, tree, ground, onTap }: {
   phase: FoldPhase;
   tree: RefObject<THREE.Object3D | null>;
   ground: RefObject<THREE.Object3D | null>;
-  onTap: IslandSceneProps["onTap"];
+  onTap(action: "fold" | "grow" | "poke", at?: THREE.Vector3): void;
 }) {
   const gl = useThree((s) => s.gl);
   const camera = useThree((s) => s.camera);
@@ -120,7 +120,8 @@ function Taps({ phase, tree, ground, onTap }: {
       const g = ground.current ? raycaster.intersectObject(ground.current, true)[0] : undefined;
       const hit = t && (!g || t.distance <= g.distance) ? "tree" : g ? "ground" : "none";
       const action = nextFoldTarget(phase, hit);
-      if (action) onTap(action);
+      // A meadow tap carries where it landed, in the island's own space.
+      if (action) onTap(action, hit === "ground" && g && ground.current ? ground.current.worldToLocal(g.point.clone()) : undefined);
     };
     el.addEventListener("pointerdown", onDown);
     el.addEventListener("pointerup", onUp);
@@ -146,8 +147,11 @@ export default function IslandScene(props: IslandSceneProps) {
   const [phase, setPhase] = useState<FoldPhase>(folded ? "folded" : "tree");
   const fold = useRef<FoldState>({ t: folded ? 1 : 0, cam: folded ? 1 : 0, poke: 0 });
   // The poke shake is the scene's; sound and everything else is the page's call.
-  const tap = useCallback((action: "fold" | "grow" | "poke") => {
-    if (action === "poke" && !reducedMotion) fold.current.poke = 1;
+  const tap = useCallback((action: "fold" | "grow" | "poke", at?: THREE.Vector3) => {
+    if (action === "poke" && !reducedMotion) {
+      fold.current.poke = 1;
+      if (at) tapMeadow(at.x, at.z);
+    }
     onTap(action);
   }, [onTap, reducedMotion]);
 
