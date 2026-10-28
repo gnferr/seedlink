@@ -17,6 +17,7 @@ import FoldCamera from "./FoldCamera";
 import IslandMesh from "./IslandMesh";
 import Particles from "./Particles";
 import SkyDome from "./SkyDome";
+import { Wind } from "./toon";
 import SkyLights from "./SkyLights";
 import TreeMesh from "./TreeMesh";
 
@@ -186,6 +187,7 @@ export default function IslandScene(props: IslandSceneProps) {
       }}
     >
       <SkyDome time={time} />
+      <Wind reducedMotion={reducedMotion} />
       <SkyLights time={time} fold={fold} radius={island.radius} reducedMotion={reducedMotion} />
       <Timeline foldRef={fold} folded={folded} reducedMotion={reducedMotion} world={tree} bobRef={bobRef} ratio={ratio} setPhase={setPhase} onPhase={onPhase} />
       <FoldCamera radius={island.radius} crownRadius={tree.crownRadius} size={matrix.size} insets={insets} fold={fold} orbit={phase === "tree"} />

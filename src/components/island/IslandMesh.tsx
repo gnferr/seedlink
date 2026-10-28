@@ -415,7 +415,7 @@ export default function IslandMesh({
       {sprigs.length > 0 && (
         <instancedMesh key={`p${sprigs.length}`} ref={plants} args={[undefined, undefined, sprigs.length]}>
           <boxGeometry />
-          <Toon />
+          <Toon windy />
         </instancedMesh>
       )}
       {cover.length > 0 && (
@@ -426,7 +426,7 @@ export default function IslandMesh({
       )}
       {cards.length > 0 && (
         <instancedMesh key={`g${cards.length}`} ref={grassCards} args={[cardGeometry, undefined, cards.length]}>
-          <Toon map={grassMap} alphaTest={0.5} side={THREE.DoubleSide} />
+          <Toon map={grassMap} alphaTest={0.5} side={THREE.DoubleSide} windy />
         </instancedMesh>
       )}
     </group>
