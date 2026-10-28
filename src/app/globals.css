@@ -119,8 +119,8 @@ select {
 
 .seg { display: flex; gap: 4px; padding: 4px; }
 .seg .btn { height: 36px; font-size: 14px; }
-.swatches { display: flex; gap: 8px; padding: 9px 12px; }
-.swatches button { all: unset; width: 22px; height: 22px; cursor: pointer; box-shadow: inset 0 -3px 0 rgb(0 0 0 / .22), inset 0 2px 0 rgb(255 255 255 / .2); }
+.swatches { display: flex; gap: 4px; padding: 8px 10px; }
+.swatches button { all: unset; width: 26px; height: 26px; cursor: pointer; box-shadow: inset 0 -3px 0 rgb(0 0 0 / .22), inset 0 2px 0 rgb(255 255 255 / .2); }
 .swatches button[aria-pressed="true"] { outline: 2px solid var(--moon); outline-offset: 2px; }
 .swatches button:focus-visible { outline: 2px solid var(--firefly); outline-offset: 2px; }
 
@@ -138,7 +138,10 @@ select {
 @media (max-width: 640px) {
   .seg-label { display: none; }
   .pill { width: 100%; box-sizing: border-box; }
-  .field { width: auto; flex: 1; }
+  /* The link gets its own full row; the buttons share the row under it, Save taking the rest. */
+  .pill-row { flex-wrap: wrap; }
+  .field { width: auto; flex: 1 0 100%; box-sizing: border-box; }
+  .btn.save { flex: 1; }
 }
 
 /* The chip and pill column spans the width (the pill fills it on phones) but only its controls take taps. */
