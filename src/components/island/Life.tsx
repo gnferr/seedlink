@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { skyState } from "@/lib/daycycle";
 import { mulberry32 } from "@/lib/rng";
 import type { FoldState } from "./IslandScene";
-import { Toon, windAt } from "./toon";
+import { meadowTap, Toon, windAt, windClock } from "./toon";
 
 // Screen axes of the default iso view on the ground: right, and into the screen.
 const RIGHT = new THREE.Vector3(1, 0, -1).normalize();
@@ -47,6 +47,9 @@ export default function Life({ time, half, fold }: { time: number; half: number;
   const fox = useRef<THREE.Group>(null);
   const fireflies = useRef<THREE.Points>(null);
   const glow = useMemo(() => glowTexture(), []);
+  // Reactions to the last meadow tap: seconds of fright left per butterfly and for the walkers, and how far the
+  // walkers' stride has been hurried along.
+  const fright = useRef({ seen: meadowTap.z, flies: new Float32Array(8), walk: 0, hurry: 0 });
 
   const world = useMemo(() => {
     const r = mulberry32(7);
@@ -74,7 +77,13 @@ export default function Life({ time, half, fold }: { time: number; half: number;
     if (!g) return;
     g.visible = fold.current.t === 0;
     if (!g.visible) return;
-    const t = clock.elapsedTime, dt = Math.min(delta, 0.1);
+    const dt = Math.min(delta, 0.1), fr = fright.current;
+    const tapped = meadowTap.z !== fr.seen && windClock() - meadowTap.z < 0.5;
+    fr.seen = meadowTap.z;
+    // A frightened walker dashes: its stride clock runs three times as fast for a moment.
+    fr.walk = Math.max(0, fr.walk - dt);
+    if (fr.walk > 0) fr.hurry += dt * 2;
+    const t = clock.elapsedTime + fr.hurry;
 
     const bm = birdMesh.current;
     if (bm) {
@@ -103,12 +112,20 @@ export default function Life({ time, half, fold }: { time: number; half: number;
       fm.visible = light.day;
       world.flies.forEach((f, i) => {
         // Wander toward a goal over the meadow, pushed by the wind; pick a new goal on arrival.
+        const away = Math.hypot(f.p.x - meadowTap.x, f.p.z - meadowTap.y);
+        if (tapped && away < 7) {
+          // Scatter: up and away from the tap.
+          const k = 6 / Math.max(0.5, away);
+          f.goal.set(f.p.x + (f.p.x - meadowTap.x) * k, 3 + Math.random() * 2, f.p.z + (f.p.z - meadowTap.y) * k);
+          fr.flies[i] = 1.6;
+        }
+        fr.flies[i] = Math.max(0, fr.flies[i] - dt);
         if (f.goal.lengthSq() === 0 || f.p.distanceTo(f.goal) < 0.6) f.goal.set((Math.random() - 0.5) * half * 1.6, 0.9 + Math.random() * 1.6, (Math.random() - 0.5) * half * 1.6);
         const [wx, wz] = windAt(f.p.x, f.p.z);
-        f.p.lerp(f.goal, dt * 0.5);
+        f.p.lerp(f.goal, dt * (fr.flies[i] > 0 ? 2.2 : 0.5));
         f.p.x += wx * dt * 2; f.p.z += wz * dt * 2;
-        f.p.x = THREE.MathUtils.clamp(f.p.x, -half, half); f.p.z = THREE.MathUtils.clamp(f.p.z, -half, half);
-        const flap = Math.abs(Math.sin(t * 14 + f.phase)) * 1.2;
+        f.p.x = THREE.MathUtils.clamp(f.p.x, -half * 1.3, half * 1.3); f.p.z = THREE.MathUtils.clamp(f.p.z, -half * 1.3, half * 1.3);
+        const flap = Math.abs(Math.sin(t * (fr.flies[i] > 0 ? 26 : 14) + f.phase)) * 1.2;
         for (const side of [-1, 1]) {
           o.position.set(f.p.x, f.p.y + Math.sin(t * 3 + f.phase) * 0.15, f.p.z);
           o.rotation.set(0, Math.PI / 4, side * (0.2 + flap));
@@ -124,17 +141,19 @@ export default function Life({ time, half, fold }: { time: number; half: number;
     }
 
     // A rabbit (day) or a fox (dusk) crosses the meadow for ~9 s every ~26 s.
+    // Returns whether the walker is out and near a fresh tap.
     const walk = (grp: THREE.Group | null, show: boolean, cycle: number, hop: number) => {
-      if (!grp) return;
+      if (!grp) return false;
       const k = (t % cycle) / 9;
       grp.visible = show && k < 1;
-      if (!grp.visible) return;
+      if (!grp.visible) return false;
       const x = THREE.MathUtils.lerp(-half * 0.8, half * 0.7, k), z = THREE.MathUtils.lerp(half * 0.5, -half * 0.3, k);
       grp.position.set(x, hop * Math.abs(Math.sin(t * 6)), z);
       grp.rotation.y = Math.atan2(-(-half * 0.3 - half * 0.5), half * 1.5);
+      return tapped && Math.hypot(x - meadowTap.x, z - meadowTap.y) < 10;
     };
-    walk(rabbit.current, light.day, 26, 0.35);
-    walk(fox.current, light.dusk, 31, 0.05);
+    const near = walk(rabbit.current, light.day, 26, 0.35);
+    if (walk(fox.current, light.dusk, 31, 0.05) || near) fr.walk = 1.2;
 
     const pts = fireflies.current;
     if (pts) {

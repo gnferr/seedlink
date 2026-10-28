@@ -9,14 +9,30 @@ const ramp = new THREE.DataTexture(new Uint8Array([60, 60, 60, 255, 150, 150, 15
 ramp.minFilter = ramp.magFilter = THREE.NearestFilter;
 ramp.needsUpdate = true;
 
-/** One wind for every plant: its clock, shared by all wind-bent materials. */
-const wind = { uWindTime: { value: 0 } };
+/** One wind for every plant: its clock, and the last meadow tap (x, z, clock time), shared by all wind-bent materials. */
+const wind = { uWindTime: { value: 0 }, uTap: { value: new THREE.Vector3(0, 0, -1e3) } };
+
+/** The last meadow tap, in the island's space: x, z, and the wind clock when it landed (for Life to react to). */
+export const meadowTap: Readonly<THREE.Vector3> = wind.uTap.value;
+export const windClock = () => wind.uWindTime.value;
+
+/** A tap on the meadow sends a ring of wind out through the grass from (x, z). */
+export function tapMeadow(x: number, z: number) {
+  wind.uTap.value.set(x, z, wind.uWindTime.value);
+}
 
 // Bends a plant toward the wind by its height above the ground (and hanging plants by their depth below the rim),
 // in the island's own space so every plant leans the same way. Mostly still, with a faint ripple; every ~14 s a
 // gust front rolls across the island.
 const WIND_GLSL = /* glsl */ `
 uniform float uWindTime;
+uniform vec3 uTap;
+varying float vTapRing;
+// A ring running out from the last tap at 10 units/s, fading within about a second.
+float tapRing(vec2 p) {
+  float age = uWindTime - uTap.z;
+  return exp(-pow((length(p - uTap.xy) - age * 10.0) / 1.6, 2.0)) * exp(-age * 1.8);
+}
 vec2 windAt(vec2 p) {
   vec2 dir = normalize(vec2(1.0, 0.35));
   float along = dot(p, dir), t = uWindTime;
@@ -46,10 +62,19 @@ function bend(shader: THREE.WebGLProgramParametersWithUniforms) {
         local = instanceMatrix * local;
       #endif
       float reach = min(2.5, max(0.0, local.y) + max(0.0, -0.9 - local.y) * 0.6); // capped for the longest vines
-      local.xz += windAt(local.xz) * reach * 0.45;
+      // The tap's ring pushes plants outward and presses them down, and they catch a little light as it passes.
+      vec2 away = local.xz - uTap.xy;
+      float ring = tapRing(local.xz);
+      vTapRing = ring * min(1.0, reach);
+      local.xz += (windAt(local.xz) * 0.45 + (length(away) > 0.01 ? normalize(away) : vec2(0.0)) * ring * 1.1) * reach;
+      local.y -= ring * reach * 0.45;
       vec4 mvPosition = modelViewMatrix * local;
       gl_Position = projectionMatrix * mvPosition;
     `);
+  shader.fragmentShader = shader.fragmentShader
+    .replace("#include <common>", "#include <common>\nvarying float vTapRing;")
+    .replace("#include <color_fragment>", /* glsl */ `#include <color_fragment>
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.97, 0.82), vTapRing * 0.25);`);
 }
 
 /** The scene's lit material: toon-shaded with the shared three-band ramp; `windy` plants bend in the shared wind. */
