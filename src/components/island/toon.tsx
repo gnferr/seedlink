@@ -27,6 +27,15 @@ vec2 windAt(vec2 p) {
 }
 `;
 
+/** The same wind as WIND_GLSL, for things moved on the CPU (butterflies, birds): [x, z] push now at (x, z). */
+export function windAt(x: number, z: number): [number, number] {
+  const dx = 1 / Math.hypot(1, 0.35), dz = 0.35 * dx, t = wind.uWindTime.value, along = x * dx + z * dz;
+  const ripple = Math.sin(t * 1.6 - along * 0.35) * 0.5 + Math.sin(t * 2.7 + z * 0.5 + x * 0.2) * 0.25;
+  const front = (((t * 9) % 130) + 130) % 130 - 45;
+  const s = 0.12 + ripple * 0.18 + Math.exp(-(((along - front) / 7) ** 2)) * 1.7;
+  return [dx * s, dz * s];
+}
+
 function bend(shader: THREE.WebGLProgramParametersWithUniforms) {
   Object.assign(shader.uniforms, wind);
   shader.vertexShader = shader.vertexShader
@@ -44,7 +53,7 @@ function bend(shader: THREE.WebGLProgramParametersWithUniforms) {
 }
 
 /** The scene's lit material: toon-shaded with the shared three-band ramp; `windy` plants bend in the shared wind. */
-export function Toon({ windy, ...props }: { map?: THREE.Texture; alphaTest?: number; side?: THREE.Side; windy?: boolean }) {
+export function Toon({ windy, ...props }: { map?: THREE.Texture; alphaTest?: number; side?: THREE.Side; color?: string; windy?: boolean }) {
   const extra = useMemo(() => (windy ? { onBeforeCompile: bend, customProgramCacheKey: () => "wind" } : {}), [windy]);
   return <meshToonMaterial gradientMap={ramp} {...props} {...extra} />;
 }

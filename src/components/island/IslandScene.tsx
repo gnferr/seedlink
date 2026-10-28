@@ -15,6 +15,7 @@ import type { FoldPhase } from "@/lib/status";
 import { fitTree, growTree, pickSpecies, type Species } from "@/lib/tree";
 import FoldCamera from "./FoldCamera";
 import IslandMesh from "./IslandMesh";
+import Life from "./Life";
 import Particles from "./Particles";
 import SkyDome from "./SkyDome";
 import { Wind } from "./toon";
@@ -195,6 +196,7 @@ export default function IslandScene(props: IslandSceneProps) {
         <IslandMesh island={island} dark={dark} size={matrix.size} pitch={pitch} season={season} fold={fold} groupRef={groundRef} />
         <TreeMesh tree={tree} pieces={foldPlan.pieces} plan={foldPlan.plan} dark={dark} season={season} leaf={leaf} fold={fold} reducedMotion={reducedMotion} groupRef={treeRef} />
         {!reducedMotion && phase !== "folded" && <Particles tree={tree} season={season} fold={fold} />}
+        {!reducedMotion && <Life time={time} half={island.slabHalf + 1} fold={fold} />}
       </group>
       <Taps phase={phase} tree={treeRef} ground={groundRef} onTap={tap} />
     </Canvas>
