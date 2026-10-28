@@ -186,7 +186,7 @@ export default function IslandScene(props: IslandSceneProps) {
         onCanvasReady(gl.domElement);
       }}
     >
-      <SkyDome time={time} />
+      <SkyDome time={time} reducedMotion={reducedMotion} />
       <Wind reducedMotion={reducedMotion} />
       <SkyLights time={time} fold={fold} radius={island.radius} reducedMotion={reducedMotion} />
       <Timeline foldRef={fold} folded={folded} reducedMotion={reducedMotion} world={tree} bobRef={bobRef} ratio={ratio} setPhase={setPhase} onPhase={onPhase} />
