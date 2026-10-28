@@ -8,6 +8,7 @@ import { hash3 } from "@/lib/rng";
 import type { Season } from "@/lib/seasons";
 import type { Tree } from "@/lib/tree";
 import type { FoldState } from "./IslandScene";
+import { windAt } from "./toon";
 
 const COUNT = 40;
 const dummy = new THREE.Object3D();
@@ -17,14 +18,16 @@ export default function Particles({ tree, season, fold }: { tree: Tree; season: 
   const mesh = useRef<THREE.InstancedMesh>(null);
   const { particle, particleKind: kind } = PALETTES[season];
   const seeds = useMemo(() => Array.from({ length: COUNT }, (_, i) => [0, 1, 2, 3].map((k) => hash3(i, k, 0, 9))), []);
+  // How far the wind has carried each falling piece (x, z) since it last started at the top, and its last fall.
+  const carried = useRef({ xz: new Float32Array(COUNT * 2), fall: new Float32Array(COUNT) });
   const crownY = tree.trunkHeight + tree.crownRadius * 0.35;
   const R = tree.crownRadius * 0.9;
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     const m = mesh.current;
     if (!m) return;
     const time = clock.elapsedTime;
-    const hide = 1 - fold.current.t;
+    const hide = 1 - fold.current.t, drift = carried.current;
     for (let i = 0; i < COUNT; i++) {
       const seed = seeds[i];
       const a = seed[0], b = seed[1], c = seed[2], d = seed[3];
@@ -35,7 +38,13 @@ export default function Particles({ tree, season, fold }: { tree: Tree; season: 
         s = 0.5 + 0.5 * Math.sin(time * 4 + i);
       } else {
         const fall = (time * (kind === "snow" ? 2 : 3) * (0.6 + b) + a * 40) % 40;
-        dummy.position.set((c - 0.5) * R * 2.6 + Math.sin(time + i) * 1.5, crownY + 12 - fall, (d - 0.5) * R * 2.6 + Math.cos(time * 0.8 + i) * 1.5);
+        if (fall < drift.fall[i]) drift.xz[i * 2] = drift.xz[i * 2 + 1] = 0; // back at the top
+        drift.fall[i] = fall;
+        const x = (c - 0.5) * R * 2.6 + Math.sin(time + i) * 1.5 + drift.xz[i * 2], z = (d - 0.5) * R * 2.6 + Math.cos(time * 0.8 + i) * 1.5 + drift.xz[i * 2 + 1];
+        const [wx, wz] = windAt(x, z), dt = Math.min(delta, 0.1);
+        drift.xz[i * 2] += wx * dt * 5;
+        drift.xz[i * 2 + 1] += wz * dt * 5;
+        dummy.position.set(x, crownY + 12 - fall, z);
         if (kind === "snow") s = 0.6;
       }
       dummy.rotation.set(time * b, time * c, 0);
