@@ -87,14 +87,17 @@ export default function ControlPill({ input, onInput, invalid, season, panelOpen
           <button
             ref={seasonButtonRef}
             type="button"
-            className="btn icon sel step"
+            className="btn sel step season-btn"
             aria-expanded={panelOpen}
             aria-controls="season-panel"
             aria-label={`Season and colours (${SEASON_LABEL[season]})`}
             title="Season and colours"
             onClick={onTogglePanel}
           >
+            {/* The season's name and a caret, so it reads as "opens the season panel", not a light/dark switch. */}
             <PixelIcon name={seasonIcon(season)} />
+            <span className="season-label" aria-hidden="true">{SEASON_LABEL[season]}</span>
+            <PixelIcon name="up" />
           </button>
           {shareMode && (
             <button

@@ -312,6 +312,26 @@ test("text contrast >= 4.5 with the season panel open", async ({ page }) => {
   expect(w.ratio, w.desc).toBeGreaterThanOrEqual(4.5);
 });
 
+test("text contrast >= 4.5 at night, over the darkest sky", async ({ page }) => {
+  await ready(page);
+  await openPanel(page);
+  await setTime(page, 1000); // 23:00
+  await page.keyboard.press("Escape");
+  const w = await worstTextContrast(page);
+  expect(w.ratio, w.desc).toBeGreaterThanOrEqual(4.5);
+});
+
+test("every control is at least 24x24 px at phone size (WCAG 2.5.8)", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await ready(page);
+  await openPanel(page);
+  const small = await page.locator(".ui button, .ui input[type=range]").evaluateAll((els) =>
+    els.map((e) => ({ name: e.getAttribute("aria-label") ?? e.textContent?.trim(), r: e.getBoundingClientRect() }))
+      .filter(({ r }) => r.width > 0 && (r.width < 24 || r.height < 24))
+      .map(({ name, r }) => `${name} ${Math.round(r.width)}x${Math.round(r.height)}`));
+  expect(small).toEqual([]);
+});
+
 test("folded verdict text keeps contrast", async ({ page }) => {
   await ready(page);
   await fold(page);
