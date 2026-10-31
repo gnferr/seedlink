@@ -7,11 +7,11 @@ import HintChip from "@/components/controls/HintChip";
 import SeasonPanel from "@/components/controls/SeasonPanel";
 import { timeFromClock } from "@/lib/daycycle";
 import { generateMatrix, QUIET_ZONE, type QrMatrix } from "@/lib/qr";
-import { exportPng, pngFile } from "@/lib/exporters";
+import { exportPng, exportSvg, pngFile } from "@/lib/exporters";
 import { useReducedMotion } from "@/lib/useReducedMotion";
 import type { Season } from "@/lib/seasons";
 import { PALETTES } from "@/lib/palette";
-import { QR_IMAGE, qrPixels } from "@/lib/qrImage";
+import { minPrintCm, QR_IMAGE, qrPixels, qrSvg } from "@/lib/qrImage";
 import { sampleBuffer, sampleScan } from "@/lib/sampleScan";
 import type { Separation } from "@/lib/verify";
 import { frameKey, nextScanFrame, NO_INSETS, tooSmallToScan, type ScanFrame } from "@/lib/scanFit";
@@ -29,6 +29,7 @@ const UNAVAILABLE = "3D view unavailable — your browser could not start WebGL.
 const DEFAULT_URL = "https://example.com";
 const DEBOUNCE_MS = 300;
 const FILENAME = "seedlink-qr.png";
+const SVG_FILENAME = "seedlink-qr.svg";
 
 type ShareMode = "share" | "copy";
 
@@ -190,9 +191,12 @@ export default function Home() {
     canvas.getContext("2d")?.putImageData(new ImageData(img.data, img.width, img.height), 0, 0);
     return canvas;
   };
-  const saveImage = () => {
+  // The SVG is drawn from the same matrix, so it passes through the same self-check before it leaves.
+  const saveImage = (format: "png" | "svg") => {
     const canvas = qrCanvas();
-    if (canvas) exportPng(canvas, FILENAME);
+    if (!canvas) return;
+    if (format === "png") exportPng(canvas, FILENAME);
+    else exportSvg(qrSvg(qr.matrix), SVG_FILENAME);
   };
 
   // Phones share the file through the system sheet; elsewhere it goes to the clipboard. Neither: no button.
@@ -352,6 +356,7 @@ export default function Home() {
             seasonButtonRef={seasonButtonRef}
             saveBlocked={blocked}
             onSave={saveImage}
+            printCm={minPrintCm(qr.matrix)}
             shareMode={shareMode}
             onShare={shareImage}
           />

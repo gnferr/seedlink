@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { generateMatrix, QUIET_ZONE, type QrMatrix } from "../src/lib/qr";
-import { QR_IMAGE } from "../src/lib/qrImage";
+import { minPrintCm, QR_IMAGE, qrSvg } from "../src/lib/qrImage";
 import { scanFit, tooSmallToScan } from "../src/lib/scanFit";
 import { saveBlockedReason } from "../src/lib/status";
 
@@ -15,6 +15,12 @@ test.beforeEach(() => test.slow());
 
 const chip = (page: Page) => page.locator("button.hint");
 const save = (page: Page) => page.getByRole("button", { name: "Save" });
+/** Save opens its format menu; picking an item starts the download. */
+async function saveAs(page: Page, format: "PNG" | "SVG") {
+  await save(page).click();
+  const [dl] = await Promise.all([page.waitForEvent("download"), page.getByRole("menuitem", { name: new RegExp(`^${format}`) }).click()]);
+  return dl;
+}
 const field = (page: Page) => page.getByRole("textbox", { name: "Link or text" });
 const hint = async (page: Page) => (await chip(page).textContent())?.trim() ?? "";
 const openPanel = (page: Page) => page.getByRole("button", { name: /^Season and colours/ }).click();
@@ -54,7 +60,10 @@ test("keyboard fold reaches the verdict and Save downloads the PNG", async ({ pa
   await page.keyboard.press("Enter");
   await expect(chip(page)).toHaveText(VERDICT, { timeout: 20_000 });
   await enabled(page);
-  const [dl] = await Promise.all([page.waitForEvent("download"), save(page).click()]);
+  await save(page).focus(); // Save sits after the field and buttons in the tab order
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("menuitem").first()).toBeFocused();
+  const [dl] = await Promise.all([page.waitForEvent("download"), page.keyboard.press("Enter")]);
   expect(dl.suggestedFilename()).toBe("seedlink-qr.png");
 });
 
@@ -96,9 +105,35 @@ async function foldAndSave(page: Page) {
   const m = generateMatrix(await field(page).inputValue());
   // Every module centre was sampled and matched (the count lives on the scene, not in the hint).
   expect(await page.locator("[data-scan]").getAttribute("data-scan")).toBe(`${m.size * m.size}/${m.size * m.size}`);
-  const [dl] = await Promise.all([page.waitForEvent("download"), save(page).click()]);
+  const dl = await saveAs(page, "PNG");
   return { path: (await dl.path())!, m };
 }
+
+test("Save as SVG downloads the same code as vectors, sized to its minimum print width", async ({ page }) => {
+  await ready(page);
+  await fold(page);
+  await save(page).click();
+  const svgItem = page.getByRole("menuitem", { name: /^SVG/ });
+  const m = generateMatrix(await field(page).inputValue()), cm = minPrintCm(m);
+  await expect(svgItem).toContainText(`at least ${cm.toFixed(1)} cm`);
+  const [dl] = await Promise.all([page.waitForEvent("download"), svgItem.click()]);
+  expect(dl.suggestedFilename()).toBe("seedlink-qr.svg");
+  expect(readFileSync((await dl.path())!, "utf8")).toBe(qrSvg(m));
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(save(page)).toBeFocused();
+});
+
+test("the Save menu closes on Escape and never opens while Save is refused", async ({ page }) => {
+  await ready(page);
+  await save(page).click({ force: true }); // refused before the fold
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await fold(page);
+  await save(page).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(save(page)).toBeFocused();
+});
 
 test("the saved PNG is the plain code: finders on the grid and every module matching the matrix", async ({ page }) => {
   await ready(page);
@@ -602,7 +637,7 @@ test("Share hands the system share sheet the same PNG Save downloads", async ({ 
   await fold(page);
   await shareButton(page).click();
   await expect.poll(() => sent(page)).toHaveLength(1);
-  const [dl] = await Promise.all([page.waitForEvent("download"), save(page).click()]);
+  const dl = await saveAs(page, "PNG");
   const [file] = await sent(page);
   expect(file).toEqual({ name: "seedlink-qr.png", type: "image/png", size: readFileSync((await dl.path())!).length, text: "https://example.com" });
 });
