@@ -135,12 +135,21 @@ select {
 
 .pill-row { padding: 6px; }
 
+/* Save's format menu floats above the pill, right-aligned to Save; the pill's clip-path would cut it, so it sits outside. */
+.pill-wrap { position: relative; }
+.save-menu { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 1; width: max-content; max-width: calc(100vw - 32px); }
+.save-menu > .inner { background: rgb(var(--ink)); } /* solid: it overlaps the hint chip */
+.menu-list { display: flex; flex-direction: column; gap: 4px; padding: 6px; }
+.menu-item { justify-content: flex-start; gap: 10px; width: 100%; white-space: nowrap; }
+.menu-item span { color: rgb(var(--dusk-text)); font-size: 14px; }
+.menu-item:hover span, .menu-item:focus-visible span { color: var(--moon); }
+
 /* On wide screens the controls grow a step, so they read beside the large island. */
 @media (min-width: 1024px) { .ui { zoom: 1.15; } }
 
 @media (max-width: 640px) {
   .seg-label { display: none; }
-  .pill { width: 100%; box-sizing: border-box; }
+  .pill, .pill-wrap { width: 100%; box-sizing: border-box; }
   /* The link gets its own full row; the buttons share the row under it, Save taking the rest. */
   .pill-row { flex-wrap: wrap; }
   .field { width: auto; flex: 1 0 100%; box-sizing: border-box; }

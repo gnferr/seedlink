@@ -21,3 +21,26 @@ export function qrPixels(m: QrMatrix, moduleSize = QR_IMAGE.moduleSize) {
   }
   return { data, width, height };
 }
+
+/** The smallest print width that still scans reliably: half a millimetre per module, quiet zone included, never under 2 cm. */
+export function minPrintCm(m: QrMatrix): number {
+  return Math.max(2, Math.ceil((m.size + 2 * QUIET_ZONE) * 0.5) / 10);
+}
+
+/** The print file: ink modules as one path on the white square, quiet zone included, sized to its minimum print width. */
+export function qrSvg(m: QrMatrix): string {
+  const n = m.size + 2 * QUIET_ZONE, cm = minPrintCm(m);
+  let d = "";
+  for (let z = 0; z < m.size; z++) {
+    // Runs of ink along a row become one rectangle each, so the file stays small.
+    for (let c = 0; c < m.size; ) {
+      if (m.cells[z * m.size + c] !== 1) { c++; continue; }
+      let e = c;
+      while (e < m.size && m.cells[z * m.size + e] === 1) e++;
+      d += `M${c + QUIET_ZONE} ${z + QUIET_ZONE}h${e - c}v1h-${e - c}z`;
+      c = e;
+    }
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${cm}cm" height="${cm}cm" viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges">`
+    + `<rect width="${n}" height="${n}" fill="${QR_IMAGE.background}"/><path d="${d}" fill="${QR_IMAGE.ink}"/></svg>`;
+}

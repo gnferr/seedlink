@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateMatrix, QUIET_ZONE } from "./qr.ts";
-import { QR_IMAGE, qrPixels } from "./qrImage.ts";
+import { minPrintCm, QR_IMAGE, qrPixels, qrSvg } from "./qrImage.ts";
 import { sampleBuffer } from "./sampleScan.ts";
 
 const m = generateMatrix("https://example.com");
@@ -36,4 +36,20 @@ test("sampleBuffer separates the image", () => {
   const s = sampleBuffer(img.data, img.width, img.height, m, M);
   assert.equal(s.separated, true);
   assert.equal(s.matched, s.total);
+});
+
+test("qrSvg: its rectangles redraw exactly the matrix, inside the quiet zone, at the minimum print width", () => {
+  const svg = qrSvg(m), n = m.size + 2 * QUIET_ZONE;
+  assert.match(svg, new RegExp(`viewBox="0 0 ${n} ${n}"`));
+  assert.match(svg, new RegExp(`width="${minPrintCm(m)}cm"`));
+  const cells = new Uint8Array(m.size * m.size);
+  for (const [, x, y, w] of svg.matchAll(/M(\d+) (\d+)h(\d+)v1h-\d+z/g))
+    for (let i = 0; i < Number(w); i++) cells[(Number(y) - QUIET_ZONE) * m.size + Number(x) - QUIET_ZONE + i] = 1;
+  assert.deepEqual([...cells], [...m.cells]);
+});
+
+test("minPrintCm: half a millimetre per module, never under 2 cm, and longer links print bigger", () => {
+  assert.equal(minPrintCm(generateMatrix("https://example.com")), Math.max(2, Math.ceil((m.size + 8) * 0.5) / 10));
+  assert.equal(minPrintCm({ size: 21, cells: new Uint8Array(441) }), 2);
+  assert.ok(minPrintCm(generateMatrix("https://example.com/" + "a".repeat(400))) > minPrintCm(m));
 });
