@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { PerformanceMonitor } from "@react-three/drei";
 import * as THREE from "three";
 import { easeInOutCubic, FOLD_SECONDS, foldPieces, planFold } from "@/lib/fold";
 import { growIsland } from "@/lib/island";
@@ -172,17 +173,22 @@ export default function IslandScene(props: IslandSceneProps) {
   // Three-quarter pixels for the garden (sharp enough for ferns and grass, a little pixelated); the folded code renders
   // at the full device ratio so even the densest code samples cleanly.
   const ratio = Math.min(2, window.devicePixelRatio || 1);
+  // A device that drops frames gets half pixels in the garden and a still tree (its sway is most of the CPU work);
+  // grass, clouds and animals keep moving, and both come back if it keeps up again. The folded code never drops.
+  const [low, setLow] = useState(false);
 
   return (
     <Canvas
       flat
       gl={{ preserveDrawingBuffer: true, antialias: false }}
-      dpr={phase === "folded" ? ratio : ratio * 0.75}
+      dpr={phase === "folded" ? ratio : ratio * (low ? 0.5 : 0.75)}
       onCreated={({ gl }) => {
         gl.domElement.style.imageRendering = "pixelated";
         onCanvasReady(gl.domElement);
       }}
     >
+      {/* Only the resting garden is timed, so start-up shader compiles and the grow and fold never count against it. */}
+      {phase === "tree" && <PerformanceMonitor bounds={(hz) => (hz > 100 ? [60, 90] : [45, 55])} flipflops={3} onDecline={() => setLow(true)} onIncline={() => setLow(false)} onFallback={() => setLow(true)} />}
       <SkyDome time={time} season={season} reducedMotion={reducedMotion} />
       <Wind reducedMotion={reducedMotion} />
       <SkyLights time={time} fold={fold} radius={island.radius} reducedMotion={reducedMotion} />
@@ -190,7 +196,7 @@ export default function IslandScene(props: IslandSceneProps) {
       <FoldCamera radius={island.radius} crownRadius={tree.crownRadius} size={matrix.size} insets={insets} fold={fold} orbit={phase === "tree"} />
       <group ref={bobRef}>
         <IslandMesh island={island} dark={dark} size={matrix.size} pitch={pitch} season={season} fold={fold} groupRef={groundRef} />
-        <TreeMesh tree={tree} pieces={foldPlan.pieces} plan={foldPlan.plan} dark={dark} season={season} leaf={leaf} fold={fold} reducedMotion={reducedMotion} groupRef={treeRef} />
+        <TreeMesh tree={tree} pieces={foldPlan.pieces} plan={foldPlan.plan} dark={dark} season={season} leaf={leaf} fold={fold} reducedMotion={reducedMotion} still={low} groupRef={treeRef} />
         {!reducedMotion && phase !== "folded" && <Particles tree={tree} season={season} time={time} fold={fold} />}
         {!reducedMotion && <Life time={time} season={season} half={island.slabHalf + 1} fold={fold} />}
       </group>

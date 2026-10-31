@@ -51,6 +51,7 @@ export default function TreeMesh({
   leaf,
   fold,
   reducedMotion,
+  still,
   groupRef,
 }: {
   tree: Tree;
@@ -61,6 +62,8 @@ export default function TreeMesh({
   leaf: string | null;
   fold: RefObject<FoldState>;
   reducedMotion: boolean;
+  /** Holds the tree still in the garden, for devices that drop frames. */
+  still: boolean;
   /** Cards and segments, for tap raycasts. */
   groupRef: RefObject<THREE.Group | null>;
 }) {
@@ -114,7 +117,7 @@ export default function TreeMesh({
     const cm = cardMesh.current, sm = segMesh.current, im = inkMesh.current;
     if (!cm || !sm || !im) return;
     const { t, poke } = fold.current;
-    const sway = t === 0 && !reducedMotion;
+    const sway = t === 0 && !reducedMotion && !still;
     const l = last.current;
     const recolour = look !== l.look || cm !== l.cm || sm !== l.sm;
     const full = t !== l.t || recolour || plan !== l.plan || im !== l.im;
