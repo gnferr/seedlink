@@ -17,6 +17,8 @@ import { sampleBuffer, sampleScan } from "@/lib/sampleScan";
 import type { Separation } from "@/lib/verify";
 import { frameKey, nextScanFrame, NO_INSETS, tooSmallToScan, type ScanFrame } from "@/lib/scanFit";
 import { treeName } from "@/lib/tree";
+import { cardQrLayout, drawShareCard } from "@/lib/shareCard";
+import { SEASON_LABEL } from "@/components/controls/SeasonPanel";
 import { hintAction, hintText, opensHost, saveBlockedReason, type FoldPhase, type StatusInput } from "@/lib/status";
 import { playChime, playChirp, setSoundOn } from "@/lib/sound";
 
@@ -32,6 +34,7 @@ const DEFAULT_URL = "https://example.com";
 const DEBOUNCE_MS = 300;
 const FILENAME = "seedlink-qr.png";
 const SVG_FILENAME = "seedlink-qr.svg";
+const CARD_FILENAME = "seedlink-card.png";
 
 type ShareMode = "share" | "copy";
 
@@ -199,7 +202,32 @@ export default function Home() {
     return canvas;
   };
   // The SVG is drawn from the same matrix, so it passes through the same self-check before it leaves.
-  const saveImage = (format: "png" | "svg") => {
+  // The share card: the garden as it was when the tree folded, its name, and the plain code. The code's pixels on
+  // the finished card are what get checked, so nothing drawn over them can slip past.
+  const gardenShot = useRef<{ canvas: HTMLCanvasElement; season: Season } | null>(null);
+  const cardCanvas = () => {
+    const shot = gardenShot.current, host = opensHost(qr.text);
+    const font = getComputedStyle(document.documentElement).getPropertyValue("--font-pixel").trim() || "monospace";
+    const card = drawShareCard(shot?.canvas ?? null, qr.matrix, {
+      name,
+      grown: `grown from ${host ?? "your text"} · ${SEASON_LABEL[shot?.season ?? season]}`,
+      scan: host ? ["Scan to open", host] : ["Scan to read", "the text"],
+    }, font);
+    const q = cardQrLayout(qr.matrix.size);
+    const region = card.getContext("2d")!.getImageData(q.x, q.y, q.side, q.side);
+    const separation = sampleBuffer(region.data, q.side, q.side, qr.matrix, q.pitch);
+    if (!separation.separated) {
+      setScan({ key: verifyKey, frame: currentFrame, separation });
+      return null;
+    }
+    return card;
+  };
+  const saveImage = (format: "png" | "svg" | "card") => {
+    if (format === "card") {
+      const card = cardCanvas();
+      if (card) exportPng(card, CARD_FILENAME);
+      return;
+    }
     const canvas = qrCanvas();
     if (!canvas) return;
     if (format === "png") exportPng(canvas, FILENAME);
@@ -222,13 +250,13 @@ export default function Home() {
     return () => clearTimeout(id);
   }, [notice]);
   const shareImage = () => {
-    const canvas = qrCanvas();
-    if (!canvas) return;
-    const file = pngFile(canvas, FILENAME);
+    const card = cardCanvas();
+    if (!card) return;
+    const file = pngFile(card, CARD_FILENAME);
     const sent =
       shareMode === "share"
         ? navigator.share({ files: [file], title: "Seedlink", text: qr.text }).then(() => null)
-        : navigator.clipboard.write([new ClipboardItem({ "image/png": file })]).then(() => "Copied the QR image.");
+        : navigator.clipboard.write([new ClipboardItem({ "image/png": file })]).then(() => "Copied the share card.");
     sent.then(setNotice, (e: unknown) => {
       // Closing the share sheet is not a failure.
       if (!(e instanceof DOMException && e.name === "AbortError")) setNotice("Couldn't share the image. Use Save instead.");
@@ -245,10 +273,19 @@ export default function Home() {
 
   // The phase moves now, not on the scene's next frame, so Save is refused in this same render.
   const fold = useCallback((to: boolean) => {
+    // Keep the garden for the share card: once folded, the scene shows the code instead of the tree.
+    const scene = canvasRef.current;
+    if (to && scene) {
+      const copy = document.createElement("canvas");
+      copy.width = scene.width;
+      copy.height = scene.height;
+      copy.getContext("2d")?.drawImage(scene, 0, 0);
+      gardenShot.current = { canvas: copy, season };
+    }
     setFolded(to);
     setPhase(to ? "folding" : "growing");
     playChime(to ? "fold" : "grow");
-  }, []);
+  }, [season]);
   // A tap on the world that only dismissed the season panel does nothing else.
   const dismissedAt = useRef(-Infinity);
   const onTap = useCallback(

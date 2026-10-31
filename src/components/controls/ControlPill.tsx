@@ -4,8 +4,8 @@ import PixelIcon from "./PixelIcon";
 import { SEASON_LABEL, seasonIcon } from "./SeasonPanel";
 
 /**
- * Link field, season button, Share (when the browser can) and Save. Save opens a two-item menu: PNG for screens, SVG
- * for print with its minimum print width. A refused Save or Share stays focusable and says why.
+ * Link field, season button, Share (when the browser can) and Save. Save opens a menu: PNG for screens, SVG for print
+ * with its minimum print width, and the share card. A refused Save or Share stays focusable and says why.
  */
 export default function ControlPill({ input, onInput, invalid, season, panelOpen, onTogglePanel, seasonButtonRef, saveBlocked, onSave, printCm, shareMode, onShare }: {
   input: string;
@@ -16,7 +16,7 @@ export default function ControlPill({ input, onInput, invalid, season, panelOpen
   onTogglePanel(): void;
   seasonButtonRef: Ref<HTMLButtonElement>;
   saveBlocked: string | null;
-  onSave(format: "png" | "svg"): void;
+  onSave(format: "png" | "svg" | "card"): void;
   printCm: number;
   shareMode: "share" | "copy" | null;
   onShare(): void;
@@ -51,7 +51,7 @@ export default function ControlPill({ input, onInput, invalid, season, panelOpen
       items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
     }
   };
-  const pick = (format: "png" | "svg") => {
+  const pick = (format: "png" | "svg" | "card") => {
     close();
     onSave(format);
   };
@@ -66,6 +66,9 @@ export default function ControlPill({ input, onInput, invalid, season, panelOpen
             </button>
             <button type="button" role="menuitem" className="btn menu-item" onClick={() => pick("svg")}>
               <b>SVG</b><span>for print, at least {printCm.toFixed(1)} cm wide</span>
+            </button>
+            <button type="button" role="menuitem" className="btn menu-item" onClick={() => pick("card")}>
+              <b>Card</b><span>for posting, the tree with its code</span>
             </button>
           </div>
         </div>

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { generateMatrix, QUIET_ZONE, type QrMatrix } from "../src/lib/qr";
 import { minPrintCm, QR_IMAGE, qrSvg } from "../src/lib/qrImage";
+import { CARD, cardQrLayout } from "../src/lib/shareCard";
 import { scanFit, tooSmallToScan } from "../src/lib/scanFit";
 import { saveBlockedReason } from "../src/lib/status";
 
@@ -16,7 +17,7 @@ test.beforeEach(() => test.slow());
 const chip = (page: Page) => page.locator("button.hint");
 const save = (page: Page) => page.getByRole("button", { name: "Save" });
 /** Save opens its format menu; picking an item starts the download. */
-async function saveAs(page: Page, format: "PNG" | "SVG") {
+async function saveAs(page: Page, format: "PNG" | "SVG" | "Card") {
   await save(page).click();
   const [dl] = await Promise.all([page.waitForEvent("download"), page.getByRole("menuitem", { name: new RegExp(`^${format}`) }).click()]);
   return dl;
@@ -652,7 +653,7 @@ type Sent = { name: string; type: string; size: number; text?: string };
 const shareButton = (page: Page) => page.getByRole("button", { name: /^(Share|Copy) image$/ });
 const sent = (page: Page) => page.evaluate(() => (window as unknown as { sent: Sent[] }).sent);
 
-test("Share hands the system share sheet the same PNG Save downloads", async ({ page }) => {
+test("Share hands the system share sheet the same card Save downloads", async ({ page }) => {
   await page.addInitScript(() => {
     const w = window as unknown as { sent: Sent[] };
     w.sent = [];
@@ -669,9 +670,9 @@ test("Share hands the system share sheet the same PNG Save downloads", async ({ 
   await fold(page);
   await shareButton(page).click();
   await expect.poll(() => sent(page)).toHaveLength(1);
-  const dl = await saveAs(page, "PNG");
+  const dl = await saveAs(page, "Card");
   const [file] = await sent(page);
-  expect(file).toEqual({ name: "seedlink-qr.png", type: "image/png", size: readFileSync((await dl.path())!).length, text: "https://example.com" });
+  expect(file).toEqual({ name: "seedlink-card.png", type: "image/png", size: readFileSync((await dl.path())!).length, text: "https://example.com" });
 });
 
 test("without a share sheet, Share copies the image and says so", async ({ page }) => {
@@ -688,8 +689,46 @@ test("without a share sheet, Share copies the image and says so", async ({ page 
   await fold(page);
   await shareButton(page).click();
   await expect.poll(() => sent(page)).toEqual([{ name: "", type: "image/png", size: 0 }]);
-  await expect(chip(page)).toHaveText("Copied the QR image.");
+  await expect(chip(page)).toHaveText("Copied the share card.");
   await expect(chip(page)).toHaveText(VERDICT, { timeout: 5_000 });
+});
+
+test("the card is a 4:5 post: the garden behind, the name, and every module of the code where the layout puts it", async ({ page }) => {
+  await ready(page);
+  // The card keeps the garden as it was at the fold, so fold only once the scene has drawn it.
+  await expect.poll(() => page.evaluate(() => {
+    const s = document.querySelector("canvas")!, c = document.createElement("canvas");
+    c.width = s.width;
+    c.height = s.height;
+    const x = c.getContext("2d")!;
+    x.drawImage(s, 0, 0);
+    return x.getImageData(0, Math.floor(s.height / 2), s.width, 1).data.some((v, i) => i % 4 === 3 && v > 0);
+  }), { timeout: 15_000 }).toBe(true);
+  await fold(page);
+  const dl = await saveAs(page, "Card");
+  expect(dl.suggestedFilename()).toBe("seedlink-card.png");
+  const m = generateMatrix("https://example.com"), q = cardQrLayout(m.size);
+  const pts: number[][] = [];
+  for (let z = 0; z < m.size; z++) for (let x = 0; x < m.size; x++) pts.push([q.x + (x + QUIET_ZONE + 0.5) * q.pitch, q.y + (z + QUIET_ZONE + 0.5) * q.pitch]);
+  const card = await page.evaluate(async ({ src, pts }) => {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height;
+    const ctx = c.getContext("2d", { willReadFrequently: true })!;
+    ctx.drawImage(img, 0, 0);
+    const { data } = ctx.getImageData(0, 0, img.width, img.height);
+    const hex = ([x, y]: number[]) => "#" + [0, 1, 2].map((i) => data[(Math.floor(y) * img.width + Math.floor(x)) * 4 + i].toString(16).padStart(2, "0")).join("");
+    // The garden: many colours in the middle band, not a flat fill.
+    const band = new Set<string>();
+    for (let x = 0; x < img.width; x += 9) band.add(hex([x, img.height * 0.4]));
+    return { w: img.width, h: img.height, px: pts.map(hex), colours: band.size };
+  }, { src: `data:image/png;base64,${readFileSync((await dl.path())!).toString("base64")}`, pts });
+  expect([card.w, card.h]).toEqual([CARD.width, CARD.height]);
+  expect(card.px).toEqual([...m.cells].map((c) => (c === 1 ? QR_IMAGE.ink : QR_IMAGE.background)));
+  expect(card.colours).toBeGreaterThan(20);
 });
 
 test("with neither share nor clipboard, there is no Share button", async ({ page }) => {
