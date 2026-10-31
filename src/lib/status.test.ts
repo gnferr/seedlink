@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hintAction, hintText, saveBlockedReason, type StatusInput } from "./status.ts";
+import { hintAction, hintText, opensHost, saveBlockedReason, type StatusInput } from "./status.ts";
 import { TOO_SMALL_TO_SCAN } from "./scanFit.ts";
 
 const pass = { matched: 40, total: 40, worstCaseContrast: 21, separated: true };
@@ -14,6 +14,7 @@ const base: StatusInput = {
   phase: "folded",
   separation: pass,
   gradedNow: true,
+  link: "https://www.example.com/a?b=1",
 };
 const s = (over: Partial<StatusInput>): StatusInput => ({ ...base, ...over });
 
@@ -76,7 +77,7 @@ test("hint: folded checking", () => {
   assert.equal(hintText(s({ separation: pass, gradedNow: false })), "Checking the code…");
 });
 test("hint: folded pass", () => {
-  assert.equal(hintText(s({})), "Scans. Tap to grow the tree.");
+  assert.equal(hintText(s({})), "Scans and opens example.com. Never expires.");
 });
 test("hint: folded fail", () => {
   assert.equal(hintText(s({ separation: fail })), `Won't scan: ${failText}`);
@@ -87,4 +88,13 @@ test("hintAction: null while animating, otherwise the next step", () => {
   assert.equal(hintAction("folded"), "Grow the tree");
   assert.equal(hintAction("folding"), null);
   assert.equal(hintAction("growing"), null);
+});
+
+test("opensHost: the host of a web link, nothing for plain text or other schemes", () => {
+  assert.equal(opensHost("https://www.example.com/path"), "example.com");
+  assert.equal(opensHost(" http://shop.example.co.uk "), "shop.example.co.uk");
+  assert.equal(opensHost("hello world"), null);
+  assert.equal(opensHost("mailto:a@example.com"), null);
+  assert.equal(opensHost(`https://${"a".repeat(40)}.example.com`), `…${"a".repeat(19)}.example.com`);
+  assert.equal(hintText(s({ link: "just some text" })), "Scans. Never expires.");
 });

@@ -5,7 +5,7 @@ import { QR_IMAGE } from "../src/lib/qrImage";
 import { scanFit, tooSmallToScan } from "../src/lib/scanFit";
 import { saveBlockedReason } from "../src/lib/status";
 
-const VERDICT = /^Scans\. Tap to grow the tree\./;
+const VERDICT = /^Scans( and opens \S+)?\. Never expires\./;
 const NOT_FOLDED = "Fold the tree into your code first, then save.";
 const NO_CODE = "Type or paste a link to grow your island.";
 const TOO_LONG = "The text is too long for one QR code. Shorten it to save.";
@@ -502,7 +502,7 @@ test("a 101+ module link folds at 1440x900; at 390x844 the copy is what saveBloc
   const f = await chromeFrame(page);
   const tooSmall = tooSmallToScan(f.w, f.h, size + 2 * QUIET_ZONE, { top: 0, bottom: f.bottom });
   const pass = { matched: 1, total: 1, worstCaseContrast: 21, separated: true };
-  const reason = saveBlockedReason({ hasCode: true, tooLong: false, tooSmall, phase: "folded", separation: pass, gradedNow: true });
+  const reason = saveBlockedReason({ hasCode: true, tooLong: false, tooSmall, phase: "folded", separation: pass, gradedNow: true, link: text });
   if (reason) {
     await expect(chip(page)).toHaveText(reason, { timeout: 20_000 });
     await expect(page.locator("#save-reason")).toHaveText(reason);

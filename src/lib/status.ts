@@ -7,7 +7,20 @@ export type StatusInput = {
   phase: FoldPhase;
   separation: Separation | null; // only for the current inputs
   gradedNow: boolean;            // graded under the framing on screen now
+  link: string;                  // what the code encodes
 };
+
+/** The host a web link opens ("example.com"), so a scanner knows where the code goes; null for plain text. */
+export function opensHost(link: string): string | null {
+  try {
+    const u = new URL(link.trim());
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    const host = u.hostname.replace(/^www\./, "");
+    return host.length > 32 ? `…${host.slice(-31)}` : host; // a long host keeps its end, where the real domain is
+  } catch {
+    return null;
+  }
+}
 
 const NO_CODE = "Type or paste a link to grow your island.";
 const TOO_LONG = "The text is too long for one QR code. Shorten it to save.";
@@ -41,7 +54,9 @@ export function hintText(s: StatusInput): string {
       const sep = graded(s);
       if (!sep) return "Checking the code…";
       if (!sep.separated) return `Won't scan: ${failureReason(sep)}`;
-      return "Scans. Tap to grow the tree.";
+      // Static: the link is in the code itself, so it never expires or depends on a redirect service.
+      const host = opensHost(s.link);
+      return host ? `Scans and opens ${host}. Never expires.` : "Scans. Never expires.";
     }
   }
 }
