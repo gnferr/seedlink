@@ -12,7 +12,7 @@ import { hashString } from "@/lib/rng";
 import type { ScanInsets } from "@/lib/scanFit";
 import type { Season } from "@/lib/seasons";
 import type { FoldPhase } from "@/lib/status";
-import { fitTree, growTree, pickSpecies, type Species } from "@/lib/tree";
+import { fitTree, growTree, treeFor, type Species } from "@/lib/tree";
 import FoldCamera from "./FoldCamera";
 import IslandMesh from "./IslandMesh";
 import Life from "./Life";
@@ -31,7 +31,7 @@ export type IslandSceneProps = {
   onPhase(phase: FoldPhase): void; // "folded" is reported only once the camera has settled top-down
   onTap(action: "fold" | "grow" | "poke"): void;
   onCanvasReady(canvas: HTMLCanvasElement): void;
-  onTree(species: Species, seed: number): void; // a new random tree began growing
+  onTree(species: Species, seed: number): void; // the link's tree began growing
 };
 
 /** Shared per-frame fold state: `t` drives the blocks, `cam` the camera tween (both 0 = tree, 1 = folded). */
@@ -137,11 +137,6 @@ function Taps({ phase, tree, ground, onTap }: {
   return null;
 }
 
-/** A grow start draws a new species (never the previous one) and seed. */
-type Grow = { matrix: QrMatrix; folded: boolean; species: Species; seed: number };
-const draw = (previous: Species | null, matrix: QrMatrix, folded: boolean): Grow =>
-  ({ matrix, folded, species: pickSpecies(previous, Math.random()), seed: Math.floor(Math.random() * 2 ** 31) });
-
 export default function IslandScene(props: IslandSceneProps) {
   const { text, matrix, season, leaf, time, folded, reducedMotion, insets, onPhase, onTap, onCanvasReady, onTree } = props;
   const [phase, setPhase] = useState<FoldPhase>(folded ? "folded" : "tree");
@@ -155,11 +150,8 @@ export default function IslandScene(props: IslandSceneProps) {
     onTap(action);
   }, [onTap, reducedMotion]);
 
-  // A grow starts on mount, on a new matrix (new link) or when the target unfolds; nothing else regrows the tree.
-  const [grow, setGrow] = useState(() => draw(null, matrix, folded));
-  if (grow.matrix !== matrix || (grow.folded && !folded)) setGrow(draw(grow.species, matrix, folded));
-  else if (grow.folded !== folded) setGrow({ ...grow, folded });
-  const { species, seed: treeSeed } = grow;
+  // The link alone picks the tree, so a shared link always grows the same one; unfolding grows it back.
+  const { species, seed: treeSeed } = useMemo(() => treeFor(text), [text]);
   useEffect(() => onTree(species, treeSeed), [species, treeSeed, onTree]);
 
   // The world is fixed at REF_SIZE; a longer link gets more, smaller modules on the same slab.

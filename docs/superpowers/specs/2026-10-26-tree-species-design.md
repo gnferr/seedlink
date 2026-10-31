@@ -14,6 +14,8 @@ The owner finds the current voxel crown boring and too dense: it reads as one so
 
 Of three style directions shown in mockups, the owner chose **"semi-realistic shape, drawn in pixels"**. The tree keeps the world's pixel look, palette and filter, and the breathing gaps come from the tree's shape. They then picked several species from eight mockups and asked that **every time a tree grows it is a new random tree**, so no two QR trees look the same.
 
+> **Changed 2026-10-31:** the owner chose "same link, same tree" instead. The link now picks the species and the growth seed (`treeFor` in `src/lib/tree.ts`, versioned by `TREE_VERSION`), so a shared link always grows the same tree and unfolding grows it back.
+
 Mockups: `.superpowers/brainstorm/2012-1792909909/content/tree-style-v4.html` (the three directions) and `tree-pixel-variants.html` (the species).
 
 ## Goals
