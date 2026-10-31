@@ -252,6 +252,7 @@ export default function Home() {
   // A result for other inputs is never shown, including while the field is ahead of the debounced link;
   // a pass counts only under the framing on screen now.
   const status: StatusInput = {
+    link: qr.text,
     hasCode: !empty,
     tooLong,
     tooSmall,
