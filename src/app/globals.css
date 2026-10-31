@@ -110,6 +110,11 @@ select {
 .btn.icon { width: 42px; padding: 0; }
 .btn.idle { color: rgb(var(--dusk-text)); }
 .btn.idle:hover { color: var(--moon); }
+/* Share and Copy before the code passes: visibly not ready, still focusable so their reason is read out. */
+.btn.icon[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
+.btn.icon[aria-disabled="true"]:hover { color: rgb(var(--dusk-text)); }
+.season-btn { gap: 6px; padding: 0 10px; }
+.season-btn .px:last-child { width: 12px; height: 12px; }
 .btn.sel { background: var(--moon); color: #2a2342; box-shadow: inset 0 -3px 0 #b9ae8a; }
 .btn.save { padding: 0 16px 0 12px; background: var(--leaf); color: #10240f; font-weight: 600; box-shadow: inset 0 -4px 0 var(--leaf-dark), inset 0 2px 0 rgb(255 255 255 / .25); }
 .btn.save[aria-disabled="true"] { background: rgb(var(--dusk) / .35); color: rgb(243 236 210 / .8); box-shadow: none; cursor: not-allowed; }
@@ -148,7 +153,7 @@ select {
 @media (min-width: 1024px) { .ui { zoom: 1.15; } }
 
 @media (max-width: 640px) {
-  .seg-label { display: none; }
+  .seg-label, .season-label { display: none; }
   .pill, .pill-wrap { width: 100%; box-sizing: border-box; }
   /* The link gets its own full row; the buttons share the row under it, Save taking the rest. */
   .pill-row { flex-wrap: wrap; }
