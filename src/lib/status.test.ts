@@ -76,7 +76,7 @@ test("hint: folded checking", () => {
   assert.equal(hintText(s({ separation: pass, gradedNow: false })), "Checking the code…");
 });
 test("hint: folded pass", () => {
-  assert.equal(hintText(s({})), "Scans · 40/40 modules · tap to grow the tree");
+  assert.equal(hintText(s({})), "Scans. Tap to grow the tree.");
 });
 test("hint: folded fail", () => {
   assert.equal(hintText(s({ separation: fail })), `Won't scan: ${failText}`);

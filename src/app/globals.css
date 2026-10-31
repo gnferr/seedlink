@@ -135,6 +135,9 @@ select {
 
 .pill-row { padding: 6px; }
 
+/* On wide screens the controls grow a step, so they read beside the large island. */
+@media (min-width: 1024px) { .ui { zoom: 1.15; } }
+
 @media (max-width: 640px) {
   .seg-label { display: none; }
   .pill { width: 100%; box-sizing: border-box; }

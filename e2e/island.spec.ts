@@ -5,7 +5,7 @@ import { QR_IMAGE } from "../src/lib/qrImage";
 import { scanFit, tooSmallToScan } from "../src/lib/scanFit";
 import { saveBlockedReason } from "../src/lib/status";
 
-const VERDICT = /^Scans · (\d+)\/\1 modules/;
+const VERDICT = /^Scans\. Tap to grow the tree\./;
 const NOT_FOLDED = "Fold the tree into your code first, then save.";
 const NO_CODE = "Type or paste a link to grow your island.";
 const TOO_LONG = "The text is too long for one QR code. Shorten it to save.";
@@ -94,7 +94,8 @@ async function checkPng(page: Page, path: string, m: QrMatrix) {
 async function foldAndSave(page: Page) {
   await fold(page);
   const m = generateMatrix(await field(page).inputValue());
-  expect(Number(VERDICT.exec(await hint(page))![1])).toBe(m.size * m.size);
+  // Every module centre was sampled and matched (the count lives on the scene, not in the hint).
+  expect(await page.locator("[data-scan]").getAttribute("data-scan")).toBe(`${m.size * m.size}/${m.size * m.size}`);
   const [dl] = await Promise.all([page.waitForEvent("download"), save(page).click()]);
   return { path: (await dl.path())!, m };
 }

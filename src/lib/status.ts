@@ -41,7 +41,7 @@ export function hintText(s: StatusInput): string {
       const sep = graded(s);
       if (!sep) return "Checking the code…";
       if (!sep.separated) return `Won't scan: ${failureReason(sep)}`;
-      return `Scans · ${sep.matched}/${sep.total} modules · tap to grow the tree`;
+      return "Scans. Tap to grow the tree.";
     }
   }
 }
