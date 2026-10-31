@@ -40,6 +40,17 @@ export function treeFor(text: string): { species: Species; seed: number } {
   return { species: SPECIES[Math.floor(r() * SPECIES.length)], seed: Math.floor(r() * 2 ** 31) };
 }
 
+const NAME_A = ["Quiet", "Mossy", "Sunny", "Misty", "Gentle", "Brave", "Sleepy", "Lucky", "Bright", "Hidden", "Golden", "Silver", "Wild", "Little", "Old", "Humble", "Merry", "Dreamy", "Steady", "Windy", "Rainy", "Starry", "Velvet", "Amber"];
+const NAME_B = ["Ember", "Lantern", "Meadow", "River", "Pebble", "Feather", "Hollow", "Cloud", "Comet", "Thistle", "Clover", "Harbor", "Moon", "Ridge", "Fern", "Brook", "Acorn", "Petal", "Echo", "Lark", "Dune", "Frost", "Sparrow", "Spark"];
+const SPECIES_NAME: Record<Species, string> = { oak: "Oak", lushOak: "Oak", willow: "Willow", acacia: "Acacia", birch: "Birch", cherry: "Cherry" };
+
+/** The tree's name ("Quiet Ember Willow"): two words from the link and its species, so it never changes either. */
+export function treeName(text: string): string {
+  const r = mulberry32(hashString(`name-v${TREE_VERSION}:${text}`));
+  const a = NAME_A[Math.floor(r() * NAME_A.length)], b = NAME_B[Math.floor(r() * NAME_B.length)];
+  return `${a} ${b} ${SPECIES_NAME[treeFor(text).species]}`;
+}
+
 // Grown for the fixed REF_SIZE world (see qr.ts); fitTree then sizes it to the island.
 export function growTree(species: Species, seed: number): Tree {
   const cfg = VARIANTS[species], rnd = mulberry32(seed);

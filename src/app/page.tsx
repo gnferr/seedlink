@@ -1,9 +1,10 @@
 "use client";
 
-import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import ControlPill from "@/components/controls/ControlPill";
 import HintChip from "@/components/controls/HintChip";
+import TreeNameCard from "@/components/controls/TreeNameCard";
 import SeasonPanel from "@/components/controls/SeasonPanel";
 import { timeFromClock } from "@/lib/daycycle";
 import { generateMatrix, QUIET_ZONE, type QrMatrix } from "@/lib/qr";
@@ -15,7 +16,8 @@ import { minPrintCm, QR_IMAGE, qrPixels, qrSvg } from "@/lib/qrImage";
 import { sampleBuffer, sampleScan } from "@/lib/sampleScan";
 import type { Separation } from "@/lib/verify";
 import { frameKey, nextScanFrame, NO_INSETS, tooSmallToScan, type ScanFrame } from "@/lib/scanFit";
-import { hintAction, hintText, saveBlockedReason, type FoldPhase, type StatusInput } from "@/lib/status";
+import { treeName } from "@/lib/tree";
+import { hintAction, hintText, opensHost, saveBlockedReason, type FoldPhase, type StatusInput } from "@/lib/status";
 import { playChime, playChirp, setSoundOn } from "@/lib/sound";
 
 function Note({ children }: { children: ReactNode }) {
@@ -53,6 +55,7 @@ export default function Home() {
   const [input, setInput] = useState(DEFAULT_URL);
   // The last world that encoded; empty or too-long input keeps it on screen.
   const [qr, setQr] = useState<Qr>(() => ({ text: DEFAULT_URL, matrix: generateMatrix(DEFAULT_URL) }));
+  const name = useMemo(() => treeName(qr.text), [qr.text]);
   const [empty, setEmpty] = useState(false);
   const [tooLong, setTooLong] = useState(false);
   const [season, setSeasonState] = useState<Season>("SUMMER");
@@ -94,6 +97,7 @@ export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const mainRef = useRef<HTMLElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const nameRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const seasonButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -137,24 +141,27 @@ export default function Home() {
     setLeaf(null);
   };
 
-  // The hint chip and pill cover the bottom of the full-bleed world; the folded code fits above them. The season
-  // panel is left out: it is transient and may cover the code while open (the check reads the canvas, not the page).
+  // The name card covers the top and the hint chip and pill the bottom of the full-bleed world; the folded code fits
+  // between them. The season panel is left out: it is transient and may cover the code while open (the check reads
+  // the canvas, not the page).
   const [chrome, setChrome] = useState<ScanFrame>({ insets: NO_INSETS, width: 0, height: 0 });
   useLayoutEffect(() => {
-    const main = mainRef.current, bar = barRef.current;
-    if (!main || !bar) return;
+    const main = mainRef.current, bar = barRef.current, card = nameRef.current;
+    if (!main || !bar || !card) return;
     const measure = () => {
       const m = main.getBoundingClientRect();
+      const top = Math.ceil(card.getBoundingClientRect().bottom - m.top);
       const bottom = Math.ceil(m.bottom - bar.getBoundingClientRect().top);
       const width = main.clientWidth, height = main.clientHeight;
       setChrome((p) =>
-        p.insets.bottom === bottom && p.width === width && p.height === height ? p : { insets: { top: 0, bottom }, width, height },
+        p.insets.top === top && p.insets.bottom === bottom && p.width === width && p.height === height ? p : { insets: { top, bottom }, width, height },
       );
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(main);
     ro.observe(bar);
+    ro.observe(card);
     return () => ro.disconnect();
   }, []);
   // While folded at one view size the insets only grow, so a hint that changes length never re-frames the code twice.
@@ -303,7 +310,7 @@ export default function Home() {
       <h1 className="sr-only">Seedlink</h1>
       {/* Overlays stay siblings of role="img": its children are pruned from the accessibility tree. */}
       {/* An empty field fades the last code back, so it never reads as the code for nothing. */}
-      <div role="img" aria-label={`A floating island whose tree folds into the QR code for "${qr.text}".`} data-phase={phase} data-species={treeInfo?.species} data-tree-seed={treeInfo?.seed} data-scan={status.separation ? `${status.separation.matched}/${status.separation.total}` : undefined} className={`absolute inset-0 transition-opacity duration-300 motion-reduce:transition-none ${empty ? "opacity-40" : ""}`}>
+      <div role="img" aria-label={`${name}, a tree on a floating island that folds into the QR code for "${qr.text}".`} data-phase={phase} data-species={treeInfo?.species} data-tree-seed={treeInfo?.seed} data-scan={status.separation ? `${status.separation.matched}/${status.separation.total}` : undefined} className={`absolute inset-0 transition-opacity duration-300 motion-reduce:transition-none ${empty ? "opacity-40" : ""}`}>
         {/* Mount once the controls are measured, so the first fit already leaves room for them. */}
         {frame.width > 0 && (
           <SceneBoundary onFail={() => setSceneFailed(true)}>
@@ -324,6 +331,7 @@ export default function Home() {
           </SceneBoundary>
         )}
       </div>
+      <TreeNameCard name={name} host={opensHost(qr.text)} hidden={empty} cardRef={nameRef} />
       {sceneFailed ? <Note>{UNAVAILABLE}</Note> : !sceneReady && <Note>Preparing the island…</Note>}
 
       <div className="ui">

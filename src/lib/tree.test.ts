@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CARD_BUDGET, fitTree, growTree, MAX_TOP_TO_ISLAND, SEGMENT_BUDGET, SPECIES, treeFor, type Species } from "./tree.ts";
+import { CARD_BUDGET, fitTree, growTree, MAX_TOP_TO_ISLAND, SEGMENT_BUDGET, SPECIES, treeFor, treeName, type Species } from "./tree.ts";
 
 test("six species", () => {
   assert.deepEqual([...SPECIES].sort(), ["acacia", "birch", "cherry", "lushOak", "oak", "willow"]);
@@ -68,6 +68,17 @@ const PINNED = { species: "willow", seed: 872703697 };
 
 test("treeFor is pinned: changing the generator changes shared trees, so bump TREE_VERSION on purpose", () => {
   assert.deepEqual(treeFor("https://example.com"), PINNED);
+});
+
+test("treeName: pinned like the tree, two words then the species, and names spread", () => {
+  assert.equal(treeName("https://example.com"), "Old Acorn Willow");
+  const names = new Set<string>();
+  for (let i = 0; i < 500; i++) {
+    const n = treeName(`https://example.com/${i}`);
+    assert.match(n, /^\w+ \w+ (Oak|Willow|Acacia|Birch|Cherry)$/);
+    names.add(n);
+  }
+  assert.ok(names.size > 400, `only ${names.size} names`);
 });
 
 for (const s of SPECIES) {

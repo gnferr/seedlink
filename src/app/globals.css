@@ -174,3 +174,10 @@ select {
 .time input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .time:has(input:focus-visible) { outline: 2px solid var(--firefly); outline-offset: 2px; }
 .time-label { min-width: 56px; text-align: right; font-size: 14px; color: var(--moon); }
+
+/* The tree's name, top left, clear of the safe area. */
+.name-card { position: absolute; top: max(16px, env(safe-area-inset-top)); left: 16px; max-width: calc(100% - 32px); font: 15px var(--font-pixel), ui-monospace, monospace; color: var(--moon); }
+.name-inner { display: flex; flex-direction: column; gap: 2px; padding: 8px 14px; }
+.name-inner b { font-size: 16px; color: var(--firefly); }
+.name-inner span { font-size: 12px; opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (min-width: 1024px) { .name-card { zoom: 1.15; } }
