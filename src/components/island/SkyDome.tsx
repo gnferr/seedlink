@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { skyState } from "@/lib/daycycle";
+import { seasonSky, skyState } from "@/lib/daycycle";
+import type { Season } from "@/lib/seasons";
 import { buildCloudTile, buildSkyFields, CLOUD_TILE } from "@/lib/skyFields";
 
 const vertexShader = /* glsl */ `
@@ -90,7 +91,7 @@ const v3 = () => new THREE.Vector3();
 const set = (v: THREE.Vector3, c: readonly number[]) => v.set(c[0], c[1], c[2]);
 
 /** The time-of-day sky: a full-screen quad drawn first, behind everything, never depth-tested. */
-export default function SkyDome({ time, reducedMotion }: { time: number; reducedMotion: boolean }) {
+export default function SkyDome({ time, season, reducedMotion }: { time: number; season: Season; reducedMotion: boolean }) {
   const size = useThree((s) => s.size);
   const dpr = useThree((s) => s.viewport.dpr);
   const fw = Math.max(1, Math.ceil(size.width / CELL)), fh = Math.max(1, Math.ceil(size.height / CELL));
@@ -135,6 +136,7 @@ export default function SkyDome({ time, reducedMotion }: { time: number; reduced
   useEffect(() => () => material.dispose(), [material]);
 
   const sky = useMemo(() => skyState(time), [time]);
+  const bands = useMemo(() => seasonSky(sky, season), [sky, season]);
   // Uniform writes are plain copies, so doing them every frame costs nothing and allocates nothing.
   const mesh = useRef<THREE.Mesh>(null);
   const drift = useRef(0);
@@ -155,7 +157,7 @@ export default function SkyDome({ time, reducedMotion }: { time: number; reduced
     u.uField.value.set(fw, fh);
     u.uCell.value = CELL * dpr;
     u.uBufH.value = Math.floor(size.height * dpr);
-    for (let k = 0; k < sky.sky.length; k++) set(u.uSky.value[k], sky.sky[k]);
+    for (let k = 0; k < bands.length; k++) set(u.uSky.value[k], bands[k]);
     set(u.uLight.value, sky.light); set(u.uLit.value, sky.cloudLit); set(u.uDark.value, sky.cloudDark);
     u.uSun.value.set(sky.sun.x, sky.sun.y, sky.sun.up ? 1 : 0);
     u.uMoon.value.set(sky.moon.x, sky.moon.y, sky.moon.up ? 1 : 0);

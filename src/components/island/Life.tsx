@@ -5,6 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { skyState } from "@/lib/daycycle";
 import { mulberry32 } from "@/lib/rng";
+import type { Season } from "@/lib/seasons";
 import type { FoldState } from "./IslandScene";
 import { meadowTap, Toon, windAt, windClock } from "./toon";
 
@@ -39,7 +40,7 @@ const FOX = [[0, 0.45, 0, 1.0, 0.4, 0.38], [0.6, 0.62, 0, 0.36, 0.32, 0.32], [0.
  * rabbit hopping across now and then, a fox at sunset and fireflies after dark. Butterflies and birds ride the
  * garden's wind. Everything hides once the fold starts; with reduced motion the scene doesn't mount this at all.
  */
-export default function Life({ time, half, fold }: { time: number; half: number; fold: RefObject<FoldState> }) {
+export default function Life({ time, season, half, fold }: { time: number; season: Season; half: number; fold: RefObject<FoldState> }) {
   const group = useRef<THREE.Group>(null);
   const birdMesh = useRef<THREE.InstancedMesh>(null);
   const flyMesh = useRef<THREE.InstancedMesh>(null);
@@ -67,10 +68,10 @@ export default function Life({ time, half, fold }: { time: number; half: number;
     return {
       day: s.sun.up && hour < 18.2, // birds, butterflies, the rabbit
       dusk: hour > 17.5 && hour < 20.5, // the fox
-      bugs: Math.min(1, Math.max(0, (hour - 18.5) / 1.5)), // fireflies fade in after sunset
+      bugs: season === "SUMMER" ? Math.min(1, Math.max(0, (hour - 18.5) / 1.5)) : 0, // summer nights only, fading in after sunset
       ink: hour > 18.5 ? "#4a3a5a" : "#3a3550",
     };
-  }, [time]);
+  }, [time, season]);
 
   useFrame(({ clock }, delta) => {
     const g = group.current;

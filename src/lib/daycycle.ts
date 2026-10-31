@@ -1,3 +1,5 @@
+import type { Season } from "./seasons.ts";
+
 export type Period = "Dawn" | "Day" | "Sunset" | "Dusk" | "Night";
 export type RGB = [number, number, number];
 export type SkyState = {
@@ -45,6 +47,17 @@ const KF = ([
 ] as const).map(([h, sky, light, amb, haze, lit, dark]) => ({
   t: (h - START) / SPAN, sky: sky.map(rgb) as RGB[], light: rgb(light), amb: rgb(amb), haze: rgb(haze), lit: rgb(lit), dark: rgb(dark),
 }));
+
+// A light wash of each season over the sky, strongest by day: spring pastel, autumn amber, winter pale and cold.
+const SEASON_TINT: Record<Season, [RGB, number]> = {
+  SPRING: [rgb("#f6d8ea"), 0.2], SUMMER: [rgb("#ffffff"), 0], AUTUMN: [rgb("#f0b878"), 0.16], WINTER: [rgb("#e4ecf6"), 0.3],
+};
+
+/** The sky bands washed toward the season's tint; most of it fades out at night so the dark sky stays dark. */
+export function seasonSky(s: SkyState, season: Season): SkyState["sky"] {
+  const [c, k] = SEASON_TINT[season], w = k * (1 - 0.7 * s.night);
+  return s.sky.map((x) => mix(x, c, w)) as SkyState["sky"];
+}
 
 export function skyState(t: number): SkyState {
   t = clamp01(t);

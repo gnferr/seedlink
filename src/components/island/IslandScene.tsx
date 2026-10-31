@@ -191,7 +191,7 @@ export default function IslandScene(props: IslandSceneProps) {
         onCanvasReady(gl.domElement);
       }}
     >
-      <SkyDome time={time} reducedMotion={reducedMotion} />
+      <SkyDome time={time} season={season} reducedMotion={reducedMotion} />
       <Wind reducedMotion={reducedMotion} />
       <SkyLights time={time} fold={fold} radius={island.radius} reducedMotion={reducedMotion} />
       <Timeline foldRef={fold} folded={folded} reducedMotion={reducedMotion} world={tree} bobRef={bobRef} ratio={ratio} setPhase={setPhase} onPhase={onPhase} />
@@ -200,7 +200,7 @@ export default function IslandScene(props: IslandSceneProps) {
         <IslandMesh island={island} dark={dark} size={matrix.size} pitch={pitch} season={season} fold={fold} groupRef={groundRef} />
         <TreeMesh tree={tree} pieces={foldPlan.pieces} plan={foldPlan.plan} dark={dark} season={season} leaf={leaf} fold={fold} reducedMotion={reducedMotion} groupRef={treeRef} />
         {!reducedMotion && phase !== "folded" && <Particles tree={tree} season={season} time={time} fold={fold} />}
-        {!reducedMotion && <Life time={time} half={island.slabHalf + 1} fold={fold} />}
+        {!reducedMotion && <Life time={time} season={season} half={island.slabHalf + 1} fold={fold} />}
       </group>
       <Taps phase={phase} tree={treeRef} ground={groundRef} onTap={tap} />
     </Canvas>

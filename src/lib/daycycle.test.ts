@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { timeFromClock, clockFromTime, periodAt, timeLabel, skyState } from "./daycycle.ts";
+import { timeFromClock, clockFromTime, periodAt, timeLabel, skyState, seasonSky } from "./daycycle.ts";
 
 test("timeFromClock maps 06:00-23:00 linearly and clamps", () => {
   assert.equal(timeFromClock(6, 0), 0);
@@ -42,4 +42,13 @@ test("sun, moon, stars", () => {
   assert.ok(skyState(timeFromClock(22, 30)).starAlpha >= 0.95);
   assert.equal(skyState(timeFromClock(9, 0)).keyFromLeft, true);
   assert.equal(skyState(timeFromClock(17, 0)).keyFromLeft, false);
+});
+
+test("seasonSky: summer is untouched, winter pales the day, the tint mostly fades at night", () => {
+  const noon = skyState(timeFromClock(12, 0)), late = skyState(timeFromClock(23, 0));
+  const light = (c: number[]) => c[0] + c[1] + c[2];
+  assert.deepEqual(seasonSky(noon, "SUMMER"), noon.sky);
+  assert.ok(light(seasonSky(noon, "WINTER")[0]) > light(noon.sky[0]) + 60);
+  const shift = (s: typeof noon) => light(seasonSky(s, "WINTER")[0]) - light(s.sky[0]);
+  assert.ok(shift(late) < shift(noon) * 0.6, "night keeps its dark sky");
 });
