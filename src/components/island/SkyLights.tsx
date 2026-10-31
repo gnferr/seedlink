@@ -45,6 +45,7 @@ export default function SkyLights({ time, fold, radius, reducedMotion }: {
   const hemi = useRef<THREE.HemisphereLight>(null);
   const key = useRef<THREE.DirectionalLight>(null);
   const glow = useRef<THREE.Sprite>(null);
+  const fill = useRef<THREE.DirectionalLight>(null);
   const fogRef = useRef<THREE.Fog | null>(null); // made once, lazily
   const texture = useMemo(() => glowTexture(), []);
   const dir = useRef<THREE.Vector3 | null>(null);
@@ -65,7 +66,8 @@ export default function SkyLights({ time, fold, radius, reducedMotion }: {
     const swap = THREE.MathUtils.smoothstep(Math.abs(h - 19.5), 0, 0.5); // 0 at sunset, 1 half an hour either side
     return {
       target, key: srgb(new THREE.Color(), s.light), sky: srgb(new THREE.Color(), s.ambient), haze: srgb(new THREE.Color(), s.haze),
-      keyI: KEY_I * (0.25 + 0.75 * swap),
+      // Moonlight is dimmer than sun: the island darkens and cools with the sky instead of staying lit like noon.
+      keyI: KEY_I * (0.25 + 0.75 * swap) * (1 - 0.7 * s.night), hemiI: HEMI * (1 - 0.6 * s.night), fillI: FILL_I * (1 - 0.6 * s.night),
     };
   }, [time]);
 
@@ -90,6 +92,8 @@ export default function SkyLights({ time, fold, radius, reducedMotion }: {
       k.position.copy(dir.current).multiplyScalar(KEY_DIST).lerp(KEY_POS, e);
     }
     k.intensity = mixTo(day.keyI, KEY_I, e);
+    h.intensity = mixTo(day.hemiI, HEMI, e);
+    if (fill.current) fill.current.intensity = mixTo(day.fillI, FILL_I, e);
 
     // Fog only on the island's far underside, pushed out of reach as the fold closes. It stays set (no shader
     // recompiles); at t = 1 near lies beyond the camera's far plane, so the folded pad is unfogged.
@@ -112,7 +116,7 @@ export default function SkyLights({ time, fold, radius, reducedMotion }: {
     <>
       <hemisphereLight ref={hemi} args={[SKY, GROUND, HEMI]} />
       <directionalLight ref={key} color={KEY} intensity={KEY_I} position={KEY_POS} />
-      <directionalLight color={FILL} intensity={FILL_I} position={FILL_POS} />
+      <directionalLight ref={fill} color={FILL} intensity={FILL_I} position={FILL_POS} />
       <sprite ref={glow}>
         <spriteMaterial map={texture} transparent depthWrite={false} fog={false} blending={THREE.AdditiveBlending} />
       </sprite>
