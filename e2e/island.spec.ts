@@ -336,7 +336,7 @@ async function worstTextContrast(page: Page) {
   });
 }
 
-// ---- random species and the day cycle ----
+// ---- the link's tree and the day cycle ----
 const scene = (page: Page) => page.getByRole("img", { name: /floating island/ });
 const slider = (page: Page) => page.getByRole("slider", { name: "Time of day" });
 const attr = (page: Page, a: string) => scene(page).getAttribute(a);
@@ -346,17 +346,18 @@ async function grow(page: Page) {
   await expect(scene(page)).toHaveAttribute("data-phase", "tree", { timeout: 20_000 });
 }
 
-test("each grow plants a different tree and species vary", async ({ page }) => {
+test("the same link grows the same tree every time; another link grows another", async ({ page }) => {
   await ready(page);
-  const species = new Set([await attr(page, "data-species")]);
-  for (let i = 0; i < 3; i++) {
-    const before = await attr(page, "data-tree-seed");
-    await fold(page);
-    await grow(page);
-    expect(await attr(page, "data-tree-seed")).not.toBe(before);
-    species.add(await attr(page, "data-species"));
-  }
-  expect(species.size).toBeGreaterThanOrEqual(2);
+  const tree = `${await attr(page, "data-species")}/${await attr(page, "data-tree-seed")}`;
+  await fold(page);
+  await grow(page);
+  expect(`${await attr(page, "data-species")}/${await attr(page, "data-tree-seed")}`).toBe(tree);
+  await page.reload();
+  const [species, seed] = tree.split("/");
+  await expect(scene(page)).toHaveAttribute("data-tree-seed", seed, { timeout: 30_000 });
+  await expect(scene(page)).toHaveAttribute("data-species", species);
+  await typeLink(page, "https://example.com/12");
+  await expect(scene(page)).not.toHaveAttribute("data-tree-seed", seed);
 });
 
 test("season, leaf colour and time never regrow the tree", async ({ page }) => {
@@ -449,6 +450,12 @@ function linkOfSize(size: number, atLeast = false) {
   }
   throw new Error(`no link of ${size} modules`);
 }
+/** Opens the page on a link's own address (?u=), the way a shared link arrives. */
+async function openLink(page: Page, text: string) {
+  await page.goto(`/?u=${encodeURIComponent(text)}`);
+  await expect(chip(page)).toContainText("Tap the tree", { timeout: 30_000 });
+  await expect(scene(page)).toHaveAttribute("data-species", /.+/); // the scene reports its tree a frame after mounting
+}
 async function typeLink(page: Page, text: string) {
   await field(page).fill(text);
   await expect(scene(page)).toHaveAttribute("aria-label", new RegExp(`"${text}"`), { timeout: 10_000 });
@@ -463,22 +470,12 @@ const chromeFrame = (page: Page) =>
   });
 
 test("the island is the same size on screen for a 21- and a 57-module link", async ({ browser }) => {
-  // The fit follows the tree's height, so both links must grow the same tree. Math.random (the app uses it only to
-  // draw the species and seed) is seeded, and each link opens from its own address (?u=) in a fresh context, so the
-  // first tree on each load comes from the same draws; typing a link would regrow after timing-dependent renders.
-  const px: number[] = [], trees = new Set<string>();
+  // Each link grows its own tree and the fit follows the tree's height, so this allows the same 5% as the
+  // per-species test below; each link opens from its own address (?u=) in a fresh context.
+  const px: number[] = [];
   for (const size of [21, 57]) {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     const page = await ctx.newPage();
-    await page.addInitScript(() => {
-      let a = 42; // mulberry32
-      Math.random = () => {
-        a = (a + 0x6d2b79f5) | 0;
-        let t = Math.imul(a ^ (a >>> 15), 1 | a);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-      };
-    });
     const { text } = linkOfSize(size);
     await page.goto(`/?u=${text}`);
     await expect(scene(page)).toHaveAttribute("aria-label", new RegExp(`"${text}"`), { timeout: 15_000 });
@@ -486,12 +483,10 @@ test("the island is the same size on screen for a 21- and a 57-module link", asy
     await expect(scene(page)).toHaveAttribute("data-phase", "tree", { timeout: 20_000 });
     await expect(scene(page)).toHaveAttribute("data-island-px", /\d/);
     px.push(Number(await attr(page, "data-island-px")));
-    trees.add(`${await attr(page, "data-species")}/${await attr(page, "data-tree-seed")}`);
     await ctx.close();
   }
-  expect(trees.size, `both links grew the same tree: ${[...trees]}`).toBe(1);
   expect(px[0]).toBeGreaterThan(0);
-  expect(Math.abs(px[1] - px[0]) / px[0], `island px ${px}`).toBeLessThanOrEqual(0.02);
+  expect(Math.max(...px) / Math.min(...px), `island px ${px}`).toBeLessThanOrEqual(1.05);
 });
 
 test("a 101+ module link folds at 1440x900; at 390x844 the copy is what saveBlockedReason gives", async ({ page }) => {
@@ -556,16 +551,7 @@ test("at 390x844 the whole crown fits the viewport width for several species", a
   for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const page = await ctx.newPage();
-    await page.addInitScript((s) => {
-      let a = s; // mulberry32, picks the species and seed
-      Math.random = () => {
-        a = (a + 0x6d2b79f5) | 0;
-        let t = Math.imul(a ^ (a >>> 15), 1 | a);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-      };
-    }, seed);
-    await ready(page);
+    await openLink(page, `https://example.com/${seed}`); // each link picks its own species
     await expect(scene(page)).toHaveAttribute("data-phase", "tree", { timeout: 20_000 });
     const species = (await attr(page, "data-species"))!;
     seen.add(species);
@@ -584,16 +570,7 @@ test("the island keeps its size on screen whichever species grows", async ({ bro
   for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
-    await page.addInitScript((s) => {
-      let a = s; // mulberry32, picks the species and seed
-      Math.random = () => {
-        a = (a + 0x6d2b79f5) | 0;
-        let t = Math.imul(a ^ (a >>> 15), 1 | a);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-      };
-    }, seed);
-    await ready(page);
+    await openLink(page, `https://example.com/${seed}`); // each link picks its own species
     await expect(scene(page)).toHaveAttribute("data-island-px", /\d/);
     px.set(`${await attr(page, "data-species")} (seed ${seed})`, Number(await attr(page, "data-island-px")));
     await ctx.close();

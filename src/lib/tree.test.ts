@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CARD_BUDGET, fitTree, growTree, MAX_TOP_TO_ISLAND, pickSpecies, SEGMENT_BUDGET, SPECIES, type Species } from "./tree.ts";
+import { CARD_BUDGET, fitTree, growTree, MAX_TOP_TO_ISLAND, SEGMENT_BUDGET, SPECIES, treeFor, type Species } from "./tree.ts";
 
 test("six species", () => {
   assert.deepEqual([...SPECIES].sort(), ["acacia", "birch", "cherry", "lushOak", "oak", "willow"]);
@@ -52,17 +52,22 @@ test("crownRadius ignores specks; top is the max y", () => {
   assert.ok(t.cards.every((c) => c.shade >= 0 && c.shade < 1));
 });
 
-test("pickSpecies never repeats and is even", () => {
+test("treeFor: the same link always gives the same tree, and links spread over every species", () => {
+  assert.deepEqual(treeFor("https://example.com"), treeFor("https://example.com"));
+  assert.notDeepEqual(treeFor("https://example.com"), treeFor("https://example.com/"));
   const counts = new Map<Species, number>();
-  for (let i = 0; i < 1000; i++) {
-    const s = pickSpecies("oak", i / 1000);
-    assert.notEqual(s, "oak");
-    counts.set(s, (counts.get(s) ?? 0) + 1);
+  for (let i = 0; i < 1200; i++) {
+    const { species } = treeFor(`https://example.com/${i}`);
+    counts.set(species, (counts.get(species) ?? 0) + 1);
   }
-  for (const s of SPECIES) if (s !== "oak") assert.ok((counts.get(s) ?? 0) >= 150, `${s}: ${counts.get(s)}`);
-  const all = new Set<Species>();
-  for (let i = 0; i < 1000; i++) all.add(pickSpecies(null, i / 1000));
-  assert.equal(all.size, 6);
+  for (const s of SPECIES) assert.ok((counts.get(s) ?? 0) >= 150, `${s}: ${counts.get(s)}`);
+});
+
+// The default link's tree as shipped; a failure here means every shared link would grow a different tree.
+const PINNED = { species: "willow", seed: 872703697 };
+
+test("treeFor is pinned: changing the generator changes shared trees, so bump TREE_VERSION on purpose", () => {
+  assert.deepEqual(treeFor("https://example.com"), PINNED);
 });
 
 for (const s of SPECIES) {

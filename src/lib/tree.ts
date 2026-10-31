@@ -2,7 +2,7 @@
 // tree() (.superpowers/brainstorm/.../tree-pixel-variants.html): limbs radiate around the trunk in azimuth and the
 // mockup's 2D fan becomes elevation spread. Pure: a function of (species, seed, size).
 import { REF_SIZE } from "./qr.ts";
-import { hash3, mulberry32 } from "./rng.ts";
+import { hash3, hashString, mulberry32 } from "./rng.ts";
 
 export type Species = "oak" | "lushOak" | "willow" | "acacia" | "birch" | "cherry";
 export const SPECIES: readonly Species[] = ["oak", "lushOak", "willow", "acacia", "birch", "cherry"];
@@ -31,9 +31,13 @@ const SHAPE_SCALE = 0.85; // the mockup's proportions at full TS overshoot the s
 
 type Clump = { x: number; y: number; z: number; r: number; front: number };
 
-export function pickSpecies(previous: Species | null, r: number): Species {
-  const pool = SPECIES.filter((s) => s !== previous);
-  return pool[Math.min(pool.length - 1, Math.floor(r * pool.length))];
+/** The tree generator's version. Bump it only on purpose: it changes the tree behind every link already shared. */
+export const TREE_VERSION = 1;
+
+/** Same link, same tree: the species and the growth seed both come from the link. */
+export function treeFor(text: string): { species: Species; seed: number } {
+  const r = mulberry32(hashString(`tree-v${TREE_VERSION}:${text}`));
+  return { species: SPECIES[Math.floor(r() * SPECIES.length)], seed: Math.floor(r() * 2 ** 31) };
 }
 
 // Grown for the fixed REF_SIZE world (see qr.ts); fitTree then sizes it to the island.
