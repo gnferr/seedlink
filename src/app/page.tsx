@@ -297,7 +297,8 @@ export default function Home() {
     <main ref={mainRef} className="relative flex min-h-0 flex-1 overflow-hidden bg-[rgb(16_14_38)]">
       <h1 className="sr-only">Seedlink</h1>
       {/* Overlays stay siblings of role="img": its children are pruned from the accessibility tree. */}
-      <div role="img" aria-label={`A floating island whose tree folds into the QR code for "${qr.text}".`} data-phase={phase} data-species={treeInfo?.species} data-tree-seed={treeInfo?.seed} className="absolute inset-0">
+      {/* An empty field fades the last code back, so it never reads as the code for nothing. */}
+      <div role="img" aria-label={`A floating island whose tree folds into the QR code for "${qr.text}".`} data-phase={phase} data-species={treeInfo?.species} data-tree-seed={treeInfo?.seed} data-scan={status.separation ? `${status.separation.matched}/${status.separation.total}` : undefined} className={`absolute inset-0 transition-opacity duration-300 motion-reduce:transition-none ${empty ? "opacity-40" : ""}`}>
         {/* Mount once the controls are measured, so the first fit already leaves room for them. */}
         {frame.width > 0 && (
           <SceneBoundary onFail={() => setSceneFailed(true)}>
