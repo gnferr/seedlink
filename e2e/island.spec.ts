@@ -415,6 +415,18 @@ test("the same link grows the same tree every time; another link grows another",
   await expect(scene(page)).not.toHaveAttribute("data-tree-seed", seed);
 });
 
+test("the tree's name shows in the corner and the scene's label, and the folded code fits below it", async ({ page }) => {
+  await ready(page);
+  const card = page.locator(".name-card");
+  await expect(card).toContainText("Old Acorn Willow");
+  await expect(card).toContainText("grown from example.com");
+  await expect(scene(page)).toHaveAttribute("aria-label", /^Old Acorn Willow, /);
+  await fold(page); // the verdict means the code scanned with the card over the top of the view
+  await typeLink(page, "hello");
+  await expect(card).toContainText("grown from your text");
+  await expect(card).not.toContainText("Old Acorn Willow");
+});
+
 test("season, leaf colour and time never regrow the tree", async ({ page }) => {
   await ready(page);
   const seed = await attr(page, "data-tree-seed");
