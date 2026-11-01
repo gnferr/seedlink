@@ -11,6 +11,8 @@ import type { FoldState } from "./IslandScene";
 const SKY = new THREE.Color("#ffe8c4"), GROUND = new THREE.Color("#2a2140"), HEMI = 1.1;
 const KEY = new THREE.Color("#fff4e0"), KEY_I = 1.6, KEY_POS = new THREE.Vector3(30, 50, -10);
 const FILL = new THREE.Color("#9ec5ff"), FILL_I = 0.5, FILL_POS = new THREE.Vector3(-30, 20, 30);
+// Golden hour: the key warms toward amber and a low rim light from behind the island catches the edges facing the sun.
+const GOLD = new THREE.Color("#ff9a50"), RIM = new THREE.Color("#ff8a4a"), RIM_I = 1.4;
 
 // Screen axes of the default iso view along (1, 0.78, 1): right and "into the screen" on the ground.
 const RIGHT = new THREE.Vector3(1, 0, -1).normalize();
@@ -46,6 +48,7 @@ export default function SkyLights({ time, fold, radius, reducedMotion }: {
   const key = useRef<THREE.DirectionalLight>(null);
   const glow = useRef<THREE.Sprite>(null);
   const fill = useRef<THREE.DirectionalLight>(null);
+  const rim = useRef<THREE.DirectionalLight>(null);
   const fogRef = useRef<THREE.Fog | null>(null); // made once, lazily
   const texture = useMemo(() => glowTexture(), []);
   const dir = useRef<THREE.Vector3 | null>(null);
@@ -64,10 +67,14 @@ export default function SkyLights({ time, fold, radius, reducedMotion }: {
       .normalize();
     const h = 6 + time * 17;
     const swap = THREE.MathUtils.smoothstep(Math.abs(h - 19.5), 0, 0.5); // 0 at sunset, 1 half an hour either side
+    const gold = 1 - THREE.MathUtils.smoothstep(Math.abs(h - 18.9), 0, 1.3); // 1 at 18:54, gone by 17:36 and 20:12
+    const rim = new THREE.Vector3().copy(target).multiplyScalar(-1).setY(0.25).normalize(); // low, from behind
     return {
-      target, key: srgb(new THREE.Color(), s.light), sky: srgb(new THREE.Color(), s.ambient), haze: srgb(new THREE.Color(), s.haze),
+      target, rim, gold, key: srgb(new THREE.Color(), s.light).lerp(GOLD, 0.45 * gold), sky: srgb(new THREE.Color(), s.ambient),
+      haze: srgb(new THREE.Color(), s.haze),
       // Moonlight is dimmer than sun: the island darkens and cools with the sky instead of staying lit like noon.
-      keyI: KEY_I * (0.25 + 0.75 * swap) * (1 - 0.7 * s.night), hemiI: HEMI * (1 - 0.6 * s.night), fillI: FILL_I * (1 - 0.6 * s.night),
+      keyI: KEY_I * (0.55 + 0.45 * swap) * (1 + 0.2 * gold) * (1 - 0.7 * s.night), hemiI: HEMI * (1 - 0.6 * s.night),
+      fillI: FILL_I * (1 - 0.6 * s.night) * (1 - 0.5 * gold), rimI: RIM_I * gold,
     };
   }, [time]);
 
@@ -94,6 +101,10 @@ export default function SkyLights({ time, fold, radius, reducedMotion }: {
     k.intensity = mixTo(day.keyI, KEY_I, e);
     h.intensity = mixTo(day.hemiI, HEMI, e);
     if (fill.current) fill.current.intensity = mixTo(day.fillI, FILL_I, e);
+    if (rim.current) {
+      rim.current.intensity = mixTo(day.rimI, 0, e);
+      rim.current.position.copy(day.rim).multiplyScalar(KEY_DIST);
+    }
 
     // Fog only on the island's far underside, pushed out of reach as the fold closes. It stays set (no shader
     // recompiles); at t = 1 near lies beyond the camera's far plane, so the folded pad is unfogged.
@@ -108,7 +119,7 @@ export default function SkyLights({ time, fold, radius, reducedMotion }: {
     g.position.copy(camera.position).addScaledVector(camera.getWorldDirection(ahead), 600);
     g.visible = e < 1;
     g.material.color.copy(day.key);
-    g.material.opacity = 0.55 * (1 - e);
+    g.material.opacity = (0.55 + 0.3 * day.gold) * (1 - e);
     g.scale.setScalar(radius * 5);
   });
 
@@ -117,6 +128,7 @@ export default function SkyLights({ time, fold, radius, reducedMotion }: {
       <hemisphereLight ref={hemi} args={[SKY, GROUND, HEMI]} />
       <directionalLight ref={key} color={KEY} intensity={KEY_I} position={KEY_POS} />
       <directionalLight ref={fill} color={FILL} intensity={FILL_I} position={FILL_POS} />
+      <directionalLight ref={rim} color={RIM} intensity={0} />
       <sprite ref={glow}>
         <spriteMaterial map={texture} transparent depthWrite={false} fog={false} blending={THREE.AdditiveBlending} />
       </sprite>
