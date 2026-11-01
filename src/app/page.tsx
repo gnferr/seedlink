@@ -13,7 +13,7 @@ import { useReducedMotion } from "@/lib/useReducedMotion";
 import type { Season } from "@/lib/seasons";
 import { PALETTES } from "@/lib/palette";
 import { minPrintCm, QR_IMAGE, qrPixels, qrSvg } from "@/lib/qrImage";
-import { sampleBuffer, sampleScan } from "@/lib/sampleScan";
+import { sampleBuffer, scanPixels } from "@/lib/sampleScan";
 import type { Separation } from "@/lib/verify";
 import { frameKey, nextScanFrame, NO_INSETS, tooSmallToScan, type ScanFrame } from "@/lib/scanFit";
 import { treeName } from "@/lib/tree";
@@ -178,14 +178,25 @@ export default function Home() {
   const tooSmall =
     phase === "folded" && frame.width > 0 && tooSmallToScan(frame.width, frame.height, qr.matrix.size + 2 * QUIET_ZONE, frame.insets);
   // Check once the fold has settled (the scene reports "folded" only then), debounced, never per frame.
+  // A pass must also survive a real decoder reading a shrunk, blurred copy (loaded only when first needed).
   useEffect(() => {
     if (phase !== "folded" || tooSmall) return;
+    let live = true;
     const id = setTimeout(() => {
-      const canvas = canvasRef.current;
-      if (canvas) setScan({ key: verifyKey, frame: currentFrame, separation: sampleScan(canvas, qr.matrix, frame.insets) });
+      const canvas = canvasRef.current, px = canvas && scanPixels(canvas, qr.matrix, frame.insets);
+      if (!px) return;
+      const separation = sampleBuffer(px.data, px.width, px.height, qr.matrix, px.pitch, px.dy);
+      const done = (s: Separation) => live && setScan({ key: verifyKey, frame: currentFrame, separation: s });
+      if (!separation.separated) return done(separation);
+      import("@/lib/stress").then(({ stressDecode }) =>
+        done(stressDecode(px.data, px.width, px.height, px.pitch) === qr.text ? separation : { ...separation, separated: false, soft: true }),
+      );
     }, DEBOUNCE_MS);
-    return () => clearTimeout(id);
-  }, [phase, tooSmall, verifyKey, currentFrame, frame.insets, qr.matrix, glEpoch]);
+    return () => {
+      live = false;
+      clearTimeout(id);
+    };
+  }, [phase, tooSmall, verifyKey, currentFrame, frame.insets, qr.matrix, qr.text, glEpoch]);
 
   // The file is drawn from the matrix alone, not the scene; it is still self-checked before it leaves.
   const qrCanvas = () => {

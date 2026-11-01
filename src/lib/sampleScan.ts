@@ -35,25 +35,31 @@ export function sampleBuffer(
 export const bufferScale = (bufferHeight: number, cssHeight: number) => (cssHeight > 0 ? bufferHeight / cssHeight : 1);
 
 /**
- * Reads the rendered SCAN view (needs preserveDrawingBuffer) and checks dark/light modules separate.
+ * The rendered SCAN view's pixels (needs preserveDrawingBuffer), with the module pitch and offset the camera framed.
  * `insets` are CSS pixels, as the camera framed them; `k` scales them to drawing-buffer pixels. Pass the
  * on-screen canvas's scale when sampling an off-DOM copy of it.
  */
-export function sampleScan(
+export function scanPixels(
   canvas: HTMLCanvasElement,
   matrix: QrMatrix,
   insets: ScanInsets = NO_INSETS,
   k = bufferScale(canvas.height, canvas.clientHeight),
-): Separation {
+) {
   const { width, height } = canvas; // drawing-buffer pixels, not CSS pixels
   const scaled = { top: insets.top * k, bottom: insets.bottom * k };
   const copy = document.createElement("canvas");
   copy.width = width;
   copy.height = height;
   const ctx = copy.getContext("2d", { willReadFrequently: true });
-  if (!ctx) return classifySeparation([], []);
+  if (!ctx) return null;
   ctx.drawImage(canvas, 0, 0);
   const { data } = ctx.getImageData(0, 0, width, height);
   const fit = scanFit(width, height, matrix.size + QUIET_ZONE * 2, scaled);
-  return sampleBuffer(data, width, height, matrix, fit.zoom, fit.dy);
+  return { data, width, height, pitch: fit.zoom, dy: fit.dy };
+}
+
+/** Checks the rendered SCAN view's dark/light modules separate. */
+export function sampleScan(canvas: HTMLCanvasElement, matrix: QrMatrix, insets: ScanInsets = NO_INSETS, k?: number): Separation {
+  const px = scanPixels(canvas, matrix, insets, k);
+  return px ? sampleBuffer(px.data, px.width, px.height, matrix, px.pitch, px.dy) : classifySeparation([], []);
 }

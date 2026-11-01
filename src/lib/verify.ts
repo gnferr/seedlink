@@ -1,7 +1,8 @@
 /** Worst-case dark/light contrast below which a code is refused, even when the populations are ordered. */
 export const MIN_SCAN_CONTRAST = 3;
 
-export type Separation = { matched: number; total: number; worstCaseContrast: number; separated: boolean };
+// `soft`: the modules separate on the sharp render, but a real decoder could not read a shrunk, blurred copy.
+export type Separation = { matched: number; total: number; worstCaseContrast: number; separated: boolean; soft?: boolean };
 
 function linearise(channel: number): number {
   const c = channel / 255;
@@ -52,6 +53,7 @@ export function classifySeparation(darkLums: number[], lightLums: number[]): Sep
 /** Why a failed check failed, in words; empty for a pass. */
 export function failureReason(s: Separation): string {
   if (s.separated) return "";
+  if (s.soft) return "a phone camera may not read it from a distance";
   if (!Number.isFinite(s.worstCaseContrast)) return "part of the code is out of view";
   if (s.worstCaseContrast < MIN_SCAN_CONTRAST)
     return `contrast ${s.worstCaseContrast.toFixed(1)}:1, needs ${MIN_SCAN_CONTRAST}:1`;

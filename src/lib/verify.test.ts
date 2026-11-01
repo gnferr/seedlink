@@ -66,3 +66,8 @@ test("failureReason names low contrast in words", () => {
   assert.equal(failureReason(classifySeparation([0], [255])), "");
   assert.equal(failureReason(classifySeparation([200], [100])), "dark and light modules overlap");
 });
+
+test("failureReason says a soft-copy failure is about distance, not contrast", () => {
+  const sharp = classifySeparation([20], [240]);
+  assert.equal(failureReason({ ...sharp, separated: false, soft: true }), "a phone camera may not read it from a distance");
+});
