@@ -61,6 +61,11 @@ function placeCard(c: Card, s: number, o: THREE.Object3D) {
 }
 
 const warm = new THREE.Color("#e6dc8c");
+const tint = new THREE.Color();
+// Autumn turns the meadow in broad patches, ochre and rust with green left between; spring is fresh green.
+const AUTUMN_GRASS = ["#c8923a", "#b0603a"], SPRING_GRASS = "#a8dc6a";
+const FALLEN = ["#e8662a", "#d2622a", "#f7b04a", "#a8401e"];
+const SPRING_FLOWERS = ["#ffffff", "#ffd0e2", "#f58cb4", "#fff2a8"];
 
 /** A fern clump of `n` fronds and a few upright core leaves at (x, z), all scaled by `size`. */
 function fern({ sprigs: out }: Garden, p: SeasonPalette, x: number, z: number, y0: number, n: number, size: number, seed: number) {
@@ -81,7 +86,8 @@ function tuft({ cards }: Garden, p: SeasonPalette, x: number, z: number, y0: num
     const h = (m: number) => hash3(seed, m * 17 + k, 2);
     const cx = x + (h(1) - 0.5) * spread, cz = z + (h(2) - 0.5) * spread, ht = tall * (0.9 + h(3) * 0.9), ang = h(4) * Math.PI;
     const colour = blend(p, x, z, h(6) * 0.5).multiplyScalar(0.95 + h(7) * 0.25);
-    if (cozy) colour.lerp(warm, 0.18 + h(8) * 0.12);
+    if (p === PALETTES.SPRING) colour.lerp(tint.set(SPRING_GRASS), 0.2 + patch(cx / 4 + 5, cz / 4) * 0.3);
+    else if (cozy && p !== PALETTES.AUTUMN) colour.lerp(warm, 0.18 + h(8) * 0.12);
     for (const turn of [0, Math.PI / 2]) cards.push({ x: cx, z: cz, y0, h: ht, w: ht * 1.1, ang: ang + turn, colour });
   }
 }
@@ -94,10 +100,10 @@ function tuft({ cards }: Garden, p: SeasonPalette, x: number, z: number, y0: num
 function growGarden(cells: IslandVoxel[], dark: DarkModule[], size: number, pitch: number, season: Season): Garden {
   const p = PALETTES[season];
   const g: Garden = { sprigs: [], cards: [] }, out = g.sprigs, cozy = season !== "WINTER";
-  const flowers = season === "WINTER" ? ["#ffffff", "#dfe8f3", "#cfe0ff"] : FLOWERS;
+  const flowers = season === "WINTER" ? ["#ffffff", "#dfe8f3", "#cfe0ff"] : season === "SPRING" ? SPRING_FLOWERS : FLOWERS;
   const flower = (x: number, z: number, y0: number, stem: number, seed: number) => {
     out.push({ x, z, y0, len: stem, width: 0.05, thick: 0.05, ang: 0, tilt: Math.PI / 2, colour: new THREE.Color(p.grass[2]).multiplyScalar(0.75) });
-    out.push({ x, z, y0: y0 + stem, len: 0.18, width: 0.18, thick: 0.18, ang: 0, tilt: 0, colour: new THREE.Color(flowers[Math.floor(hash3(seed, 3, 3) * 3)]) });
+    out.push({ x, z, y0: y0 + stem, len: 0.18, width: 0.18, thick: 0.18, ang: 0, tilt: 0, colour: new THREE.Color(flowers[Math.floor(hash3(seed, 3, 3) * flowers.length)]) });
   };
   // Height swells and dips across the island in broad waves, with the odd tall outlier.
   const lift = (x: number, z: number, seed: number) => 0.55 + patch(x / 6 + 40, z / 6) * 0.9 + (hash3(seed, 9, 9) > 0.92 ? 0.5 : 0);
@@ -116,7 +122,10 @@ function growGarden(cells: IslandVoxel[], dark: DarkModule[], size: number, pitc
     if (col >= 0 && col < size && row >= 0 && row < size && isDark.has(row * size + col)) continue;
     const seed = x * 1013 + z * 7 + 5000, h = (n: number) => hash3(x, n, z), wild = patch(x / 3 + 70, z / 3);
     tuft(g, p, x, z, 0, Math.floor(wild * 7), 0.55 * lift(x, z, seed), 1.1, seed, cozy); // bare where the patch is low
-    if (h(60) > 0.86) flower(x + (h(63) - 0.5) * 0.6, z + (h(64) - 0.5) * 0.6, 0, 0.35 + h(61) * 0.45, seed);
+    if (h(60) > (season === "SPRING" ? 0.7 : 0.86)) flower(x + (h(63) - 0.5) * 0.6, z + (h(64) - 0.5) * 0.6, 0, (season === "SPRING" ? 0.15 : 0.35) + h(61) * 0.45, seed);
+    if (season === "AUTUMN" && h(66) > 0.6) // a fallen leaf lying flat in the grass
+      out.push({ x: x + (h(67) - 0.5) * 0.8, z: z + (h(68) - 0.5) * 0.8, y0: 0.02, len: 0.32, width: 0.24, thick: 0.04, ang: h(69) * 6.28, tilt: 0,
+        colour: new THREE.Color(FALLEN[Math.floor(h(65) * FALLEN.length)]) });
     if (h(70) > 0.9) fern(g, p, x + (h(71) - 0.5) * 0.8, z + (h(72) - 0.5) * 0.8, 0, 5 + Math.floor(h(73) * 4), 0.5 + h(74) * 0.5, seed + 1);
   }
 
@@ -202,7 +211,13 @@ function vine(g: Garden, p: SeasonPalette, style: number, x: number, z: number, 
 /** A plant green between the season's grass and hedge colour: `toward` hedge, nudged by the moss patches. */
 function blend(p: SeasonPalette, x: number, z: number, toward: number): THREE.Color {
   const k = Math.min(1, Math.max(0, toward + (patch(x / 4 + 20, z / 4) - 0.5) * 0.5));
-  return new THREE.Color(p.grass[1]).lerp(stone.set(p.hedge), k);
+  const c = new THREE.Color(p.grass[1]).lerp(stone.set(p.hedge), k);
+  return p === PALETTES.AUTUMN ? turn(c, x, z, 1) : c;
+}
+
+/** Autumn's patches: ochre or rust where the noise is high, the season's green left between. */
+function turn(c: THREE.Color, x: number, z: number, amount: number): THREE.Color {
+  return c.lerp(tint.set(AUTUMN_GRASS[patch(x / 3 + 11, z / 3) > 0.5 ? 0 : 1]), Math.max(0, patch(x / 5 + 3, z / 5) - 0.2) * amount);
 }
 
 /** Plants are gone by this far into the fold. */
@@ -235,7 +250,7 @@ function voxelColour(v: IslandVoxel, season: Season, t: number, out: THREE.Color
   const p = PALETTES[season];
   const { x, z, depth: d } = v;
   switch (v.kind) {
-    case "pad": return out.set(p.moss).lerp(stone.set(p.hedge), patch(x / 5 + 9, z / 5) * 0.35).lerp(warm, season === "WINTER" ? 0 : 0.12)
+    case "pad": return turn(out.set(p.moss).lerp(stone.set(p.hedge), patch(x / 5 + 9, z / 5) * 0.35).lerp(warm, season === "WINTER" ? 0 : 0.12), x, z, season === "AUTUMN" ? 0.8 : 0)
       .multiplyScalar((0.9 + patch(x / 2.5, z / 2.5) * 0.2) * light)
       .lerp(stone.set(PAD).multiplyScalar(0.95 + hash3(x, 1, z) * 0.05), t);
     case "hedge": return out.set(p.hedge).multiplyScalar(0.9 + hash3(x, 2, z) * 0.15);
